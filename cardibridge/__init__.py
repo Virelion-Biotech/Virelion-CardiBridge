@@ -13,7 +13,11 @@ from .observability import BridgeMetrics
 from .reliability import RetryPolicy, DeliveryAttempt
 from .deadletter import DeadLetter, DeadLetterQueue
 from .codec import EnvelopeCodec
-from .health import HealthSnapshot, health
+from .health import HealthSnapshot, health, Readiness, DependencyHealth
+from .provenance_chain import ProvenanceChain, ProvenanceBlock
+from .negotiation import ContractCapability, NegotiatedContract, ContractNegotiator
+from .circuit_breaker import CircuitBreaker, CircuitState
+from .batch import BatchResult, validate_batch, partition_payload
 
 __all__ = [
     "AgentChallenge", "VexObservation", "Prediction", "EvaluationRequest", "EvaluationResult",
@@ -21,6 +25,8 @@ __all__ = [
     "ProductionRouter", "EventStore", "InMemoryTransport", "DurableTransportAdapter",
     "CompatibilityManager", "CompatibilityResult", "Authorizer", "Principal", "BridgeMetrics",
     "RetryPolicy", "DeliveryAttempt", "DeadLetter", "DeadLetterQueue", "EnvelopeCodec",
-    "HealthSnapshot", "health", "PROTOCOL_NAME", "PROTOCOL_VERSION", "canonical_json",
-    "content_hash", "envelope_digest", "topic_for",
+    "HealthSnapshot", "health", "Readiness", "DependencyHealth", "ProvenanceChain", "ProvenanceBlock",
+    "ContractCapability", "NegotiatedContract", "ContractNegotiator", "CircuitBreaker", "CircuitState",
+    "BatchResult", "validate_batch", "partition_payload", "PROTOCOL_NAME", "PROTOCOL_VERSION",
+    "canonical_json", "content_hash", "envelope_digest", "topic_for",
 ]
