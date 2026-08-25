@@ -1,5 +1,3 @@
-from datetime import timezone
-
 import pytest
 
 from cardibridge import (
