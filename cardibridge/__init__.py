@@ -19,6 +19,7 @@ from .negotiation import ContractCapability, NegotiatedContract, ContractNegotia
 from .circuit_breaker import CircuitBreaker, CircuitState
 from .batch import BatchResult, validate_batch, partition_payload
 from .gateway import create_app
+from .defaults import AGENT_CHALLENGE, VEX_OBSERVATION, EVAL_REQUEST, EVAL_RESULT, default_registry
 
 __all__ = [
     "AgentChallenge", "VexObservation", "Prediction", "EvaluationRequest", "EvaluationResult",
@@ -28,6 +29,7 @@ __all__ = [
     "RetryPolicy", "DeliveryAttempt", "DeadLetter", "DeadLetterQueue", "EnvelopeCodec",
     "HealthSnapshot", "health", "Readiness", "DependencyHealth", "ProvenanceChain", "ProvenanceBlock",
     "ContractCapability", "NegotiatedContract", "ContractNegotiator", "CircuitBreaker", "CircuitState",
-    "BatchResult", "validate_batch", "partition_payload", "create_app", "PROTOCOL_NAME", "PROTOCOL_VERSION",
-    "canonical_json", "content_hash", "envelope_digest", "topic_for",
+    "BatchResult", "validate_batch", "partition_payload", "create_app", "default_registry",
+    "AGENT_CHALLENGE", "VEX_OBSERVATION", "EVAL_REQUEST", "EVAL_RESULT",
+    "PROTOCOL_NAME", "PROTOCOL_VERSION", "canonical_json", "content_hash", "envelope_digest", "topic_for",
 ]
