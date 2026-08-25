@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -38,7 +38,7 @@ class DeliveryAttempt:
     attempt: int
     success: bool
     error: str | None = None
-    attempted_at: datetime = datetime.now(timezone.utc)
+    attempted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     next_retry_at: datetime | None = None
 
     def as_dict(self) -> dict[str, Any]:
