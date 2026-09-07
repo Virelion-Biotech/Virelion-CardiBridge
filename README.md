@@ -1,20 +1,20 @@
 # Virelion-CardiBridge
 
-CardiBridge is the typed interoperability and protocol library for Virelion services. It defines versioned message contracts, validation, routing, persistence boundaries, and compatibility rules between components.
+CardiBridge is a typed interoperability and protocol library for exchanging structured computational messages. It defines versioned message contracts, validation, routing, persistence boundaries, and compatibility rules between components.
 
-## Scope
+## What it contains
 
-- strict Pydantic message contracts;
-- versioned contract registry and schema fingerprints;
-- explicit migrations and compatibility checks;
-- canonical JSON and SHA-256 payload identity;
-- HMAC signing primitives and authorization primitives;
-- SQLite inbox/outbox/audit log;
-- idempotent routing and replay;
-- synchronous and asynchronous transport abstractions;
-- persist-before-publish integration boundary;
-- conformance tests and contract catalog export;
-- delivery, validation, failure, and latency metrics.
+- Strict Pydantic message contracts.
+- Versioned contract registry and schema fingerprints.
+- Explicit migrations and compatibility checks.
+- Canonical JSON and SHA-256 payload identity.
+- HMAC signing and authorization primitives.
+- SQLite inbox/outbox/audit log.
+- Idempotent routing and replay.
+- Synchronous and asynchronous transport abstractions.
+- Persist-before-publish boundary for durable adapters.
+- Conformance tests and contract catalog export.
+- Delivery, validation, failure, and latency metrics.
 
 CardiBridge does not implement domain-specific cardiac algorithms.
 
@@ -28,22 +28,13 @@ CardiBridge does not implement domain-specific cardiac algorithms.
 6. Use deterministic serialization for hashing/signing.
 7. Keep transport implementations separate from scientific contracts.
 
-## Contract families
-
-| Contract | Producer | Consumer | Purpose |
-|---|---|---|---|
-| `agent.challenge` | CardiAgent | CardiVex | challenge/task definition |
-| `vex.observation` | CardiVex | downstream/evaluation | structured observations |
-| `eval.request` | model/service | CardiEval | evaluation request |
-| `eval.result` | CardiEval | downstream | evaluation result |
-
 ## Installation
 
 ```bash
 pip install -e '.[test]'
 ```
 
-## Python
+## Usage
 
 ```python
 from cardibridge.builtin import default_registry
@@ -51,21 +42,25 @@ from cardibridge.production import ProductionRouter
 
 registry = default_registry()
 router = ProductionRouter(registry)
-router.register("agent.challenge", "CardiVex", lambda envelope: {"accepted": True})
+router.register("example.message", "consumer", lambda envelope: {"accepted": True})
 ```
 
-## Integration
+## Inputs and outputs
 
-CardiBridge is the protocol boundary used by HeartTwin and sibling Virelion services. It should remain independent of model implementation details so services can be upgraded without changing domain algorithms.
+**Inputs:** versioned message envelopes, contract definitions, routing rules, idempotency keys, optional authorization/signing metadata, and transport configuration.
+
+**Outputs:** validated/canonicalized messages, routing results, persisted inbox/outbox/audit records, compatibility results, delivery metrics, and contract catalogs.
+
+## Validation
+
+The repository includes contract conformance and compatibility tests. Messages are validated before dispatch, schema fingerprints are checked, and explicit migrations are required for incompatible schema evolution.
+
+Protocol compliance does not establish scientific correctness or validity of the payload's domain content.
 
 ## Limitations
 
-A valid protocol message demonstrates contract compliance, not scientific validity. Authorization/signing primitives require appropriate key and trust management in deployment.
+CardiBridge validates and transports structured messages; it does not validate the scientific meaning of domain-specific data. Authorization and signing primitives require appropriate key storage, rotation, and trust management in deployment. Transport reliability depends on the selected adapter and deployment environment.
 
 ## License
 
 GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See `LICENSE`.
-
-## Citation
-
-Cite the repository release and the contract/schema version used.
