@@ -1,3 +1,5 @@
+import binascii
+
 import pytest
 
 from cardibridge import (
@@ -39,7 +41,7 @@ def test_envelope_codec_round_trip() -> None:
 
 
 def test_retry_policy_is_bounded() -> None:
-    policy = RetryPolicy(max_attempts=5, base_delay_seconds=2, max_delay_seconds=5)
+    policy = RetryPolicy(max_attempts=5, base_delay_seconds=2, max_delay_seconds=5, jitter=0)
     assert policy.delay(1) == 2
     assert policy.delay(3) == 5
 
@@ -56,7 +58,10 @@ def test_dlq_lifecycle() -> None:
 
 def test_conformance_and_health() -> None:
     registry = default_registry()
-    result = run_conformance(registry, [ConformanceCase("valid-agent", "agent.challenge", make_envelope().payload)])
+    result = run_conformance(
+        registry,
+        [ConformanceCase("valid-agent", "agent.challenge", make_envelope().payload)],
+    )
     assert result.passed
     snapshot = health(registry)
     assert snapshot.status == "ok"
@@ -64,5 +69,5 @@ def test_conformance_and_health() -> None:
 
 
 def test_invalid_base64_rejected() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(binascii.Error):
         EnvelopeCodec.decode_base64("not-valid-base64")
