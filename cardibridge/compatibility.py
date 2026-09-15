@@ -5,7 +5,6 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .contracts import BridgeEnvelope
 from .protocol import ContractMismatch
 from .registry import ContractRegistry
 
@@ -42,7 +41,10 @@ class CompatibilityManager:
             raise ContractMismatch(f"no migration for {contract} {source} -> {target}")
         if source == target:
             return payload
-        return self._migrations[(contract, source, target)](payload)
+        migrated = self._migrations[(contract, source, target)](payload)
+        if not isinstance(migrated, dict):
+            raise TypeError("migration must return a dict")
+        return migrated
 
     def validate_target(self, contract: str, payload: dict[str, Any]) -> BaseModel:
         return self.registry.model(contract).model_validate(payload)
