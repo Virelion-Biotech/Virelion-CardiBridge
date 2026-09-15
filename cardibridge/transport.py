@@ -183,7 +183,7 @@ class DurableTransportAdapter:
             return self._duplicate_receipt(envelope)
         try:
             receipt = await self.transport.publish(envelope)
-        except Exception as exc:  # noqa: BLE001 - adapter boundary captures arbitrary client failures
+        except Exception as exc:
             self.store.mark(envelope.message_id, "failed")
             self.store.record_attempt(DeliveryAttempt(envelope.message_id, 1, False, str(exc)))
             raise DeliveryError(str(exc)) from exc
@@ -198,7 +198,7 @@ class DurableTransportAdapter:
         for attempt in range(1, self.retry_policy.max_attempts + 1):
             try:
                 receipt = await self.transport.publish(envelope)
-            except Exception as exc:  # noqa: BLE001 - adapter boundary captures arbitrary client failures
+            except Exception as exc:
                 retry_at = (
                     self.retry_policy.next_retry_at(attempt, key=envelope.idempotency_key)
                     if attempt < self.retry_policy.max_attempts
