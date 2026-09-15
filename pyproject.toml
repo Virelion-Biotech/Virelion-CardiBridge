@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "virelion-cardibridge"
-version = "0.2.0"
+version = "0.3.0"
 description = "Contract-first interoperability protocol for the Virelion cardiac AI stack."
 readme = "README.md"
 requires-python = ">=3.10"
