@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Protocol
+
+from .contracts import BridgeEnvelope
+from .deadletter import DeadLetter, DeadLetterQueue
+from .protocol import DeliveryError, DeliveryReceipt
+from .store import EventStore
 
 
 @dataclass(frozen=True)
@@ -36,7 +42,12 @@ class RetryPolicy:
         factor = 1.0 + ((fraction * 2.0) - 1.0) * self.jitter
         return max(0.0, min(self.max_delay_seconds, delay * factor))
 
-    def next_retry_at(self, attempt: int, now: datetime | None = None, key: str | None = None) -> datetime:
+    def next_retry_at(
+        self,
+        attempt: int,
+        now: datetime | None = None,
+        key: str | None = None,
+    ) -> datetime:
         now = now or datetime.now(timezone.utc)
         return now + timedelta(seconds=self.delay(attempt, key=key))
 
@@ -59,3 +70,61 @@ class DeliveryAttempt:
             "attempted_at": self.attempted_at.isoformat(),
             "next_retry_at": self.next_retry_at.isoformat() if self.next_retry_at else None,
         }
+
+
+class PublishTransport(Protocol):
+    async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt: ...
+
+
+async def attempt_with_retry(
+    transport: PublishTransport,
+    envelope: BridgeEnvelope,
+    store: EventStore,
+    retry: RetryPolicy,
+    dead_letter: DeadLetterQueue,
+) -> DeliveryReceipt:
+    """Publish with durable attempt history, bounded retry, and terminal DLQ capture."""
+    attempts: list[DeliveryAttempt] = []
+    for attempt_number in range(1, retry.max_attempts + 1):
+        attempted_at = datetime.now(timezone.utc)
+        try:
+            receipt = await transport.publish(envelope)
+        except Exception as exc:
+            next_retry_at = (
+                retry.next_retry_at(attempt_number, now=attempted_at, key=envelope.idempotency_key)
+                if attempt_number < retry.max_attempts
+                else None
+            )
+            attempt = DeliveryAttempt(
+                message_id=envelope.message_id,
+                attempt=attempt_number,
+                success=False,
+                error=str(exc),
+                attempted_at=attempted_at,
+                next_retry_at=next_retry_at,
+            )
+            attempts.append(attempt)
+            store.record_attempt(attempt)
+            if next_retry_at is None:
+                store.mark(envelope.message_id, "dead_letter")
+                dead_letter.put(
+                    DeadLetter(
+                        envelope=envelope,
+                        reason=str(exc),
+                        attempts=tuple(attempts),
+                    )
+                )
+                raise DeliveryError(str(exc)) from exc
+            await asyncio.sleep(max(0.0, (next_retry_at - datetime.now(timezone.utc)).total_seconds()))
+        else:
+            attempt = DeliveryAttempt(
+                message_id=envelope.message_id,
+                attempt=attempt_number,
+                success=True,
+                attempted_at=attempted_at,
+            )
+            store.record_attempt(attempt)
+            store.mark(envelope.message_id, "delivered")
+            return receipt
+
+    raise RuntimeError("retry loop exited without terminal result")
