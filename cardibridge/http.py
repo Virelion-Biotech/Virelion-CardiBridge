@@ -2,10 +2,11 @@
 
 from typing import Any
 
+from .catalog import export_asyncapi, export_catalog
 from .contracts import BridgeEnvelope
 from .registry import ContractRegistry
-from .schemas import SCHEMAS
 from .router import BridgeRouter
+from .schemas import SCHEMAS
 
 
 def create_app():
@@ -14,8 +15,8 @@ def create_app():
     registry = ContractRegistry()
     for name, model in SCHEMAS.items():
         registry.register(name, model)
-    router = BridgeRouter(registry)
-    app = FastAPI(title="Virelion CardiBridge", version="0.1.0")
+    bridge_router = BridgeRouter(registry)
+    app = FastAPI(title="Virelion CardiBridge", version="0.2.0")
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -23,7 +24,11 @@ def create_app():
 
     @app.get("/contracts")
     def contracts() -> dict[str, Any]:
-        return {name: registry.model(name).model_json_schema() for name in SCHEMAS}
+        return export_catalog(registry)
+
+    @app.get("/asyncapi")
+    def asyncapi() -> dict[str, Any]:
+        return export_asyncapi(registry)
 
     @app.post("/validate/{contract}")
     def validate(contract: str, payload: dict[str, Any]):
@@ -35,5 +40,9 @@ def create_app():
     @app.post("/envelope/validate")
     def validate_envelope(envelope: BridgeEnvelope):
         return registry.validate(envelope.message_type, envelope.payload)
+
+    @app.post("/route")
+    def route(envelope: BridgeEnvelope) -> dict[str, Any]:
+        return {"result": bridge_router.dispatch(envelope)}
 
     return app
