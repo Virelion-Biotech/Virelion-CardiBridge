@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .contracts import AgentChallenge, EvaluationRequest, EvaluationResult, VexObservation
 from .catalog import export_asyncapi as _export_asyncapi
+from .contracts import AgentChallenge, EvaluationRequest, EvaluationResult, VexObservation
 
 SCHEMAS = {
     "agent.challenge": AgentChallenge,
