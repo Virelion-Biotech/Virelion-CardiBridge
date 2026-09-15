@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -19,8 +20,14 @@ class HealthSnapshot:
     store_ok: bool
 
     def as_dict(self) -> dict[str, Any]:
-        return {"status": self.status, "protocol": self.protocol, "protocol_version": self.protocol_version,
-                "contracts": self.contracts, "store_ok": self.store_ok, "checked_at": self.checked_at.isoformat()}
+        return {
+            "status": self.status,
+            "protocol": self.protocol,
+            "protocol_version": self.protocol_version,
+            "contracts": self.contracts,
+            "store_ok": self.store_ok,
+            "checked_at": self.checked_at.isoformat(),
+        }
 
 
 def health(registry: ContractRegistry, store: EventStore | None = None) -> HealthSnapshot:
@@ -28,10 +35,16 @@ def health(registry: ContractRegistry, store: EventStore | None = None) -> Healt
     if store is not None:
         try:
             store.list_events(limit=1)
-        except Exception:
+        except sqlite3.Error:
             store_ok = False
-    return HealthSnapshot("ok" if store_ok else "degraded", PROTOCOL_NAME, PROTOCOL_VERSION,
-                          len(registry._schemas), datetime.now(timezone.utc), store_ok)
+    return HealthSnapshot(
+        "ok" if store_ok else "degraded",
+        PROTOCOL_NAME,
+        PROTOCOL_VERSION,
+        len(registry._schemas),
+        datetime.now(timezone.utc),
+        store_ok,
+    )
 
 
 @dataclass
@@ -49,7 +62,13 @@ class Readiness:
         self.dependencies: dict[str, DependencyHealth] = {}
         self.started_at = datetime.now(timezone.utc)
 
-    def register(self, name: str, healthy: bool, latency_ms: float | None = None, detail: str | None = None) -> None:
+    def register(
+        self,
+        name: str,
+        healthy: bool,
+        latency_ms: float | None = None,
+        detail: str | None = None,
+    ) -> None:
         self.dependencies[name] = DependencyHealth(name, healthy, latency_ms, detail)
 
     @property
@@ -58,5 +77,10 @@ class Readiness:
 
     def snapshot(self) -> dict[str, Any]:
         uptime = (datetime.now(timezone.utc) - self.started_at).total_seconds()
-        return {"ready": self.ready, "uptime_seconds": round(uptime, 3),
-                "dependencies": {name: item.__dict__.copy() for name, item in self.dependencies.items()}}
+        return {
+            "ready": self.ready,
+            "uptime_seconds": round(uptime, 3),
+            "dependencies": {
+                name: item.__dict__.copy() for name, item in self.dependencies.items()
+            },
+        }
