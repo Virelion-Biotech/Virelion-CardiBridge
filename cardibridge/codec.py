@@ -13,7 +13,7 @@ class EnvelopeCodec:
 
     @staticmethod
     def encode(envelope: BridgeEnvelope) -> bytes:
-        return canonical_json(envelope.model_dump(mode="json")).encode("utf-8")
+        return canonical_json(envelope.model_dump(mode="json"))
 
     @staticmethod
     def decode(data: bytes | str) -> BridgeEnvelope:
