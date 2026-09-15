@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from .contracts import BridgeEnvelope
 from .deadletter import DeadLetter, DeadLetterQueue
-from .protocol import DeliveryError, DeliveryReceipt
+from .protocol import DeliveryError, DeliveryReceipt, topic_for
 
 if TYPE_CHECKING:
     from .store import EventStore
@@ -91,7 +91,7 @@ async def attempt_with_retry(
         return DeliveryReceipt(
             envelope.message_id,
             envelope.idempotency_key,
-            "",
+            topic_for(envelope),
             datetime.now(timezone.utc).isoformat(),
             duplicate=True,
             sequence=None,
