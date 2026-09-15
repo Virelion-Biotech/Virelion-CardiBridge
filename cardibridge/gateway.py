@@ -9,9 +9,9 @@ from pydantic import ValidationError
 
 from .catalog import export_asyncapi
 from .codec import EnvelopeCodec
+from .contracts import BridgeEnvelope
 from .health import health
 from .production import ProductionRouter
-from .protocol import BridgeEnvelope
 from .registry import ContractRegistry
 
 
@@ -19,7 +19,7 @@ def create_app(
     registry: ContractRegistry | None = None,
     codec: EnvelopeCodec | None = None,
     router: ProductionRouter | None = None,
-):
+) -> Any:
     """Create a FastAPI gateway; transport remains optional to the core package."""
     try:
         from fastapi import FastAPI, Header, HTTPException
@@ -95,7 +95,7 @@ def create_app(
         return {"status": "processed", "message_id": envelope.message_id, "result": result}
 
     @app.get("/v1/replay")
-    def replay(topic: str | None = None, after: int = 0) -> list[Any]:
+    def replay(topic: str | None = None, after: int = 0) -> list[tuple[int, BridgeEnvelope]]:
         return list(router.replay(topic, after))
 
     return app
