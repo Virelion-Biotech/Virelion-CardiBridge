@@ -139,7 +139,7 @@ class EvaluationResult(StrictModel):
 
 class ValidationReport(StrictModel):
     valid: bool
-    schema: str
+    schema: str  # type: ignore[assignment]
     schema_version: str
     errors: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
