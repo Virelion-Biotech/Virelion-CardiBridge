@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -66,7 +65,7 @@ class InMemoryTransport:
 
 
 class CallbackTransport:
-    """Transport adapter around an injected async publisher; useful for brokers/SDKs."""
+    """Transport adapter around an injected async publisher; useful for broker SDKs."""
 
     def __init__(self, publish_fn: Callable[[str, bytes], Awaitable[Any]]) -> None:
         self.publish_fn = publish_fn
@@ -86,11 +85,11 @@ class CallbackTransport:
         )
 
     async def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
-        raise NotImplementedError("callback transports must provide broker-specific subscription adapters")
+        raise NotImplementedError("callback transports need a broker-specific subscription adapter")
 
 
 class HttpTransport:
-    """Dependency-free HTTP publisher; HTTP is deliberately kept outside the core contract layer."""
+    """Dependency-free HTTP publisher; HTTP stays outside the core contract model."""
 
     def __init__(self, endpoint: str, timeout_seconds: float = 10.0) -> None:
         if not endpoint.startswith(("http://", "https://")):
@@ -138,7 +137,7 @@ class NatsTransport(CallbackTransport):
 
 
 class KafkaTransport(CallbackTransport):
-    """Thin optional Kafka adapter around an injected async-capable producer."""
+    """Thin optional Kafka adapter around an injected producer."""
 
     def __init__(self, producer: Any) -> None:
         async def publish(topic: str, body: bytes) -> Any:
@@ -168,30 +167,51 @@ class DurableTransportAdapter:
         self.retry_policy = retry_policy or RetryPolicy()
         self.dead_letter_queue = dead_letter_queue or DeadLetterQueue()
 
+    def _duplicate_receipt(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
+        return DeliveryReceipt(
+            envelope.message_id,
+            envelope.idempotency_key,
+            topic_for(envelope),
+            datetime.now(timezone.utc).isoformat(),
+            True,
+            None,
+        )
+
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
-        self.store.append(envelope, status="outbox")
+        inserted = self.store.append(envelope, status="outbox")
+        if not inserted:
+            return self._duplicate_receipt(envelope)
         try:
             receipt = await self.transport.publish(envelope)
-        except Exception as exc:  # noqa: BLE001 - adapter boundary must capture arbitrary client failures
+        except Exception as exc:  # noqa: BLE001 - adapter boundary captures arbitrary client failures
             self.store.mark(envelope.message_id, "failed")
+            self.store.record_attempt(DeliveryAttempt(envelope.message_id, 1, False, str(exc)))
             raise DeliveryError(str(exc)) from exc
         self.store.mark(envelope.message_id, "published")
         self.store.record_attempt(DeliveryAttempt(envelope.message_id, 1, True))
         return receipt
 
     async def publish_with_retry(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
-        self.store.append(envelope, status="outbox")
+        inserted = self.store.append(envelope, status="outbox")
+        if not inserted:
+            return self._duplicate_receipt(envelope)
         for attempt in range(1, self.retry_policy.max_attempts + 1):
             try:
                 receipt = await self.transport.publish(envelope)
-            except Exception as exc:  # noqa: BLE001 - adapter boundary must capture arbitrary client failures
+            except Exception as exc:  # noqa: BLE001 - adapter boundary captures arbitrary client failures
                 retry_at = (
                     self.retry_policy.next_retry_at(attempt, key=envelope.idempotency_key)
                     if attempt < self.retry_policy.max_attempts
                     else None
                 )
                 self.store.record_attempt(
-                    DeliveryAttempt(envelope.message_id, attempt, False, str(exc), next_retry_at=retry_at)
+                    DeliveryAttempt(
+                        envelope.message_id,
+                        attempt,
+                        False,
+                        str(exc),
+                        next_retry_at=retry_at,
+                    )
                 )
                 if retry_at is None:
                     self.store.mark(envelope.message_id, "deadletter")
