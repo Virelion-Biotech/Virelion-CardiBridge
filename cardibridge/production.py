@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any
 
 from .contracts import BridgeEnvelope
@@ -16,7 +16,12 @@ Handler = Callable[[BridgeEnvelope], Any]
 class ProductionRouter:
     """Validated, durable, observable router for Agent/Vex/Eval pipelines."""
 
-    def __init__(self, registry: ContractRegistry, store: EventStore | None = None, metrics: BridgeMetrics | None = None) -> None:
+    def __init__(
+        self,
+        registry: ContractRegistry,
+        store: EventStore | None = None,
+        metrics: BridgeMetrics | None = None,
+    ) -> None:
         self.registry = registry
         self.store = store or EventStore()
         self.metrics = metrics or BridgeMetrics()
@@ -53,7 +58,14 @@ class ProductionRouter:
 
     def receipt(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
         accepted = self.store.append(envelope, status="outbox")
-        return DeliveryReceipt(envelope.message_id, envelope.idempotency_key, topic_for(envelope), "", not accepted, None)
+        return DeliveryReceipt(
+            envelope.message_id,
+            envelope.idempotency_key,
+            topic_for(envelope),
+            "",
+            not accepted,
+            None,
+        )
 
-    def replay(self, topic: str | None = None, after: int = 0):
+    def replay(self, topic: str | None = None, after: int = 0) -> Iterable[tuple[int, BridgeEnvelope]]:
         return self.store.replay(topic, after)
