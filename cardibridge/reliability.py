@@ -85,7 +85,18 @@ async def attempt_with_retry(
     retry: RetryPolicy,
     dead_letter: DeadLetterQueue,
 ) -> DeliveryReceipt:
-    """Publish with durable attempt history, bounded retry, and terminal DLQ capture."""
+    """Persist an outbox record, publish with bounded retry, and capture terminal failures."""
+    accepted = store.append(envelope, status="outbox")
+    if not accepted:
+        return DeliveryReceipt(
+            envelope.message_id,
+            envelope.idempotency_key,
+            "",
+            datetime.now(timezone.utc).isoformat(),
+            duplicate=True,
+            sequence=None,
+        )
+
     attempts: list[DeliveryAttempt] = []
     for attempt_number in range(1, retry.max_attempts + 1):
         attempted_at = datetime.now(timezone.utc)
@@ -117,6 +128,7 @@ async def attempt_with_retry(
                     )
                 )
                 raise DeliveryError(str(exc)) from exc
+            store.mark(envelope.message_id, "retry")
             await asyncio.sleep(max(0.0, (next_retry_at - datetime.now(timezone.utc)).total_seconds()))
         else:
             attempt = DeliveryAttempt(
@@ -126,7 +138,7 @@ async def attempt_with_retry(
                 attempted_at=attempted_at,
             )
             store.record_attempt(attempt)
-            store.mark(envelope.message_id, "delivered")
+            store.mark(envelope.message_id, "published")
             return receipt
 
     raise RuntimeError("retry loop exited without terminal result")
