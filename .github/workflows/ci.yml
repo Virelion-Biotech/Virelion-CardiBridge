@@ -12,14 +12,14 @@ jobs:
       matrix:
         python: ['3.10', '3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e '.[dev,server]'
       - run: ruff check cardibridge tests
       - run: mypy cardibridge
-      - run: pytest --cov=cardibridge --cov-report=term-missing
+      - run: pytest --cov=cardibridge --cov-report=term-missing --cov-fail-under=60
       - run: python -m build
       - run: python -m pip install dist/*.whl --force-reinstall
-      - run: python -c "import cardibridge; print(cardibridge.__version__)"
+      - run: python -c "import cardibridge; assert cardibridge.__version__ == '0.3.0'; print(cardibridge.__version__)"
