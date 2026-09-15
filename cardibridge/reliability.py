@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -7,6 +8,8 @@ from typing import Any
 
 @dataclass(frozen=True)
 class RetryPolicy:
+    """Bounded exponential retry policy with deterministic optional jitter."""
+
     max_attempts: int = 5
     base_delay_seconds: float = 1.0
     max_delay_seconds: float = 300.0
@@ -21,15 +24,21 @@ class RetryPolicy:
         if self.jitter < 0 or self.jitter > 1:
             raise ValueError("jitter must be between 0 and 1")
 
-    def delay(self, attempt: int) -> float:
+    def delay(self, attempt: int, key: str | None = None) -> float:
         if attempt < 1:
             return 0.0
         multiplier = 2 ** (attempt - 1) if self.exponential else 1
-        return min(self.max_delay_seconds, self.base_delay_seconds * multiplier)
+        delay = min(self.max_delay_seconds, self.base_delay_seconds * multiplier)
+        if not key or self.jitter == 0:
+            return delay
+        digest = hashlib.sha256(f"{key}:{attempt}".encode()).digest()
+        fraction = int.from_bytes(digest[:8], "big") / 2**64
+        factor = 1.0 + ((fraction * 2.0) - 1.0) * self.jitter
+        return max(0.0, min(self.max_delay_seconds, delay * factor))
 
-    def next_retry_at(self, attempt: int, now: datetime | None = None) -> datetime:
+    def next_retry_at(self, attempt: int, now: datetime | None = None, key: str | None = None) -> datetime:
         now = now or datetime.now(timezone.utc)
-        return now + timedelta(seconds=self.delay(attempt))
+        return now + timedelta(seconds=self.delay(attempt, key=key))
 
 
 @dataclass(frozen=True)
