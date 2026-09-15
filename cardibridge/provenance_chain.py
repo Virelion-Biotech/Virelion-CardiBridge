@@ -36,25 +36,54 @@ class ProvenanceChain:
         previous = self._blocks[-1].digest if self._blocks else "0" * 64
         created = datetime.now(timezone.utc).isoformat()
         payload_digest = self._digest(payload)
-        body = {"sequence": len(self._blocks), "event_id": event_id, "event_type": event_type,
-                "actor": actor, "payload_digest": payload_digest, "previous_digest": previous,
-                "created_at": created}
-        block = ProvenanceBlock(**body, digest=self._digest(body))
+        body = {
+            "sequence": len(self._blocks),
+            "event_id": event_id,
+            "event_type": event_type,
+            "actor": actor,
+            "payload_digest": payload_digest,
+            "previous_digest": previous,
+            "created_at": created,
+        }
+        block = ProvenanceBlock(
+            sequence=body["sequence"],
+            event_id=body["event_id"],
+            event_type=body["event_type"],
+            actor=body["actor"],
+            payload_digest=body["payload_digest"],
+            previous_digest=body["previous_digest"],
+            created_at=body["created_at"],
+            digest=self._digest(body),
+        )
         self._blocks.append(block)
         return block
 
     def append_lineage(self, event: LineageEvent) -> ProvenanceBlock:
         """Commit a complete lineage event to the audit chain."""
-        return self.append(event.event_id, f"lineage.{event.event_type.lower()}", event.producer, event.to_dict())
+        return self.append(
+            event.event_id,
+            f"lineage.{event.event_type.lower()}",
+            event.producer,
+            event.to_dict(),
+        )
 
     def verify(self) -> bool:
         previous = "0" * 64
         for index, block in enumerate(self._blocks):
-            body = {"sequence": block.sequence, "event_id": block.event_id,
-                    "event_type": block.event_type, "actor": block.actor,
-                    "payload_digest": block.payload_digest, "previous_digest": block.previous_digest,
-                    "created_at": block.created_at}
-            if block.sequence != index or block.previous_digest != previous or block.digest != self._digest(body):
+            body = {
+                "sequence": block.sequence,
+                "event_id": block.event_id,
+                "event_type": block.event_type,
+                "actor": block.actor,
+                "payload_digest": block.payload_digest,
+                "previous_digest": block.previous_digest,
+                "created_at": block.created_at,
+            }
+            if (
+                block.sequence != index
+                or block.previous_digest != previous
+                or block.digest != self._digest(body)
+            ):
                 return False
             previous = block.digest
         return True
