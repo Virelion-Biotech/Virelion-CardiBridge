@@ -18,7 +18,8 @@ from .store import EventStore
 
 class AsyncTransport(Protocol):
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt: ...
-    async def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]: ...
+
+    def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]: ...
 
 
 @dataclass(frozen=True)
@@ -44,7 +45,7 @@ class InMemoryTransport:
             datetime.now(timezone.utc).isoformat(),
         )
 
-    async def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
+    def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
         raise NotImplementedError("in-memory transport uses callback subscription")
 
 
@@ -61,7 +62,7 @@ class CallbackTransport:
             datetime.now(timezone.utc).isoformat(),
         )
 
-    async def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
+    def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
         raise NotImplementedError("callback transport is publish-only")
 
 
@@ -98,7 +99,7 @@ class HttpTransport:
             datetime.now(timezone.utc).isoformat(),
         )
 
-    async def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
+    def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
         raise NotImplementedError("HTTP transport does not provide durable subscription semantics")
 
 
@@ -120,9 +121,8 @@ class DurableTransportAdapter:
 
         return await attempt_with_retry(self.transport, envelope, self.store, self.retry, self.dead_letter)
 
-    async def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
-        async for envelope in self.transport.subscribe(topic):
-            yield envelope
+    def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
+        return self.transport.subscribe(topic)
 
 
 class NatsTransport:
