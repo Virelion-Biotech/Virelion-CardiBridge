@@ -33,16 +33,28 @@ class InMemoryTransport:
     def __init__(self) -> None:
         self.messages: list[BridgeEnvelope] = []
         self.subscribers: dict[str, list[Callable[[BridgeEnvelope], Awaitable[None]]]] = defaultdict(list)
+        self._seen_keys: set[str] = set()
 
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
+        topic = topic_for(envelope)
+        now = datetime.now(timezone.utc).isoformat()
+        if envelope.idempotency_key in self._seen_keys:
+            return DeliveryReceipt(
+                envelope.message_id,
+                envelope.idempotency_key,
+                topic,
+                now,
+                duplicate=True,
+            )
+        self._seen_keys.add(envelope.idempotency_key)
         self.messages.append(envelope)
-        for callback in self.subscribers.get(topic_for(envelope), []):
+        for callback in self.subscribers.get(topic, []):
             await callback(envelope)
         return DeliveryReceipt(
             envelope.message_id,
             envelope.idempotency_key,
-            topic_for(envelope),
-            datetime.now(timezone.utc).isoformat(),
+            topic,
+            now,
         )
 
     def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
@@ -106,8 +118,8 @@ class HttpTransport:
 class DurableTransportAdapter:
     def __init__(
         self,
-        transport: AsyncTransport,
         store: EventStore,
+        transport: AsyncTransport,
         retry: RetryPolicy | None = None,
         dead_letter: DeadLetterQueue | None = None,
     ) -> None:
