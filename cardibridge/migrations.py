@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from pydantic import BaseModel
-
 
 @dataclass(frozen=True)
 class Migration:
@@ -15,6 +13,8 @@ class Migration:
 
 
 class MigrationRegistry:
+    """Explicit, deterministic registry for contract version migrations."""
+
     def __init__(self) -> None:
         self._items: dict[tuple[str, str, str], Migration] = {}
 
@@ -24,7 +24,13 @@ class MigrationRegistry:
             raise ValueError(f"migration already registered: {key}")
         self._items[key] = migration
 
-    def migrate(self, contract: str, source_version: str, target_version: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def migrate(
+        self,
+        contract: str,
+        source_version: str,
+        target_version: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
         if source_version == target_version:
             return payload
         migration = self._items.get((contract, source_version, target_version))
