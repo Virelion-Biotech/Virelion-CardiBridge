@@ -23,13 +23,14 @@ from .defaults import AGENT_CHALLENGE, VEX_OBSERVATION, EVAL_REQUEST, EVAL_RESUL
 
 __all__ = [
     "AgentChallenge", "VexObservation", "Prediction", "EvaluationRequest", "EvaluationResult",
-    "TraceContext", "BridgeEnvelope", "ValidationReport", "ContractRegistry", "BridgeRouter",
-    "ProductionRouter", "EventStore", "InMemoryTransport", "DurableTransportAdapter",
-    "CompatibilityManager", "CompatibilityResult", "Authorizer", "Principal", "BridgeMetrics",
-    "RetryPolicy", "DeliveryAttempt", "DeadLetter", "DeadLetterQueue", "EnvelopeCodec",
-    "HealthSnapshot", "health", "Readiness", "DependencyHealth", "ProvenanceChain", "ProvenanceBlock",
+    "TraceContext", "BridgeEnvelope", "ValidationReport", "ArtifactRef", "ExecutionContext",
+    "LineageFacet", "LineageEvent", "ContractRegistry", "BridgeRouter", "ProductionRouter",
+    "EventStore", "InMemoryTransport", "DurableTransportAdapter", "CompatibilityManager",
+    "CompatibilityResult", "Authorizer", "Principal", "BridgeMetrics", "RetryPolicy",
+    "DeliveryAttempt", "DeadLetter", "DeadLetterQueue", "EnvelopeCodec", "HealthSnapshot",
+    "health", "Readiness", "DependencyHealth", "ProvenanceChain", "ProvenanceBlock",
     "ContractCapability", "NegotiatedContract", "ContractNegotiator", "CircuitBreaker", "CircuitState",
     "BatchResult", "validate_batch", "partition_payload", "create_app", "default_registry",
-    "AGENT_CHALLENGE", "VEX_OBSERVATION", "EVAL_REQUEST", "EVAL_RESULT",
-    "PROTOCOL_NAME", "PROTOCOL_VERSION", "canonical_json", "content_hash", "envelope_digest", "topic_for",
+    "AGENT_CHALLENGE", "VEX_OBSERVATION", "EVAL_REQUEST", "EVAL_RESULT", "PROTOCOL_NAME",
+    "PROTOCOL_VERSION", "canonical_json", "content_hash", "envelope_digest", "topic_for",
 ]
