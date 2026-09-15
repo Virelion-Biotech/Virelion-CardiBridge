@@ -48,8 +48,16 @@ CardiAgent / CardiVex / CardiEval / CardiLearn / HeartTwin
 
 ## Installation
 
+For development:
+
 ```bash
 pip install -e '.[dev]'
+```
+
+For the optional HTTP gateway:
+
+```bash
+pip install -e '.[server]'
 ```
 
 ## Contract validation
@@ -69,9 +77,9 @@ store = EventStore("cardibridge.db")
 transport = DurableTransportAdapter(
     store,
     InMemoryTransport(),
-    retry_policy=RetryPolicy(max_attempts=5),
+    RetryPolicy(max_attempts=5),
 )
-receipt = await transport.publish_with_retry(envelope)
+receipt = await transport.publish(envelope)
 ```
 
 The durable adapter persists before external publication, records every attempt, and moves exhausted deliveries to its dead-letter queue. Consumers should remain idempotent because the protocol is intentionally at-least-once.
@@ -86,7 +94,7 @@ Use `ArtifactRef` for datasets, models, feature tables, simulation outputs, and 
 
 ## Validation and limitations
 
-CI runs Ruff and pytest across supported Python versions. Protocol conformance does not establish scientific correctness. Scientific validity, model performance, data quality, and domain-specific safety remain the responsibility of the consuming service.
+CI runs Ruff, mypy, pytest, package builds, dependency consistency checks, and vulnerability auditing across supported Python versions. Protocol conformance does not establish scientific correctness. Scientific validity, model performance, data quality, and domain-specific safety remain the responsibility of the consuming service.
 
 ## License
 
