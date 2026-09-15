@@ -5,7 +5,13 @@ import asyncio
 from cardibridge import DeliveryAttempt, LineageEvent
 from cardibridge.builtin import default_registry
 from cardibridge.compatibility import CompatibilityManager
-from cardibridge.contracts import AgentChallenge, ArtifactRef, BridgeEnvelope, ExecutionContext, TraceContext
+from cardibridge.contracts import (
+    AgentChallenge,
+    ArtifactRef,
+    BridgeEnvelope,
+    ExecutionContext,
+    TraceContext,
+)
 from cardibridge.production import ProductionRouter
 from cardibridge.protocol import content_hash, envelope_digest, topic_for
 from cardibridge.reliability import RetryPolicy
@@ -82,7 +88,7 @@ def test_lineage_store_round_trip():
     )
     assert store.append_lineage(event)
     assert not store.append_lineage(event)
-    assert list(store.lineage("run-1"))[0].event_id == event.event_id
+    assert next(iter(store.lineage("run-1"))).event_id == event.event_id
 
 
 def test_protocol_hashes_are_stable():
