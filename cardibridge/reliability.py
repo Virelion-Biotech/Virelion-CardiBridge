@@ -4,12 +4,14 @@ import asyncio
 import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .contracts import BridgeEnvelope
 from .deadletter import DeadLetter, DeadLetterQueue
 from .protocol import DeliveryError, DeliveryReceipt
-from .store import EventStore
+
+if TYPE_CHECKING:
+    from .store import EventStore
 
 
 @dataclass(frozen=True)
