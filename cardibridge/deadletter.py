@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .contracts import BridgeEnvelope
-from .reliability import DeliveryAttempt
+
+if TYPE_CHECKING:
+    from .reliability import DeliveryAttempt
 
 
 @dataclass(frozen=True)
