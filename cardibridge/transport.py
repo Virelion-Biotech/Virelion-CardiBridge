@@ -10,9 +10,9 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from .contracts import BridgeEnvelope
-from .deadletter import DeadLetter, DeadLetterQueue
+from .deadletter import DeadLetterQueue
 from .protocol import DeliveryError, DeliveryReceipt, topic_for
-from .reliability import DeliveryAttempt, RetryPolicy
+from .reliability import RetryPolicy
 from .store import EventStore
 
 
