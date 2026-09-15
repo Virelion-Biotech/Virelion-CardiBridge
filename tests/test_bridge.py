@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from cardibridge import DeliveryAttempt, LineageEvent
 from cardibridge.builtin import default_registry
 from cardibridge.compatibility import CompatibilityManager
 from cardibridge.contracts import AgentChallenge, ArtifactRef, BridgeEnvelope, ExecutionContext, TraceContext
@@ -65,13 +66,11 @@ def test_store_replay_and_attempt_history():
     assert not store.append(e)
     assert store.get_envelope(e.message_id).message_id == e.message_id
     assert store.status(e.message_id) == "accepted"
-    store.record_attempt(__import__("cardibridge").DeliveryAttempt(e.message_id, 1, True))
+    store.record_attempt(DeliveryAttempt(e.message_id, 1, True))
     assert store.attempts(e.message_id)[0].success
 
 
 def test_lineage_store_round_trip():
-    from cardibridge import LineageEvent
-
     store = EventStore()
     event = LineageEvent(
         run_id="run-1",
@@ -118,8 +117,7 @@ def test_durable_adapter_records_success():
         transport = DurableTransportAdapter(store, InMemoryTransport(), RetryPolicy(max_attempts=2))
         receipt = await transport.publish(envelope("durable-1"))
         assert not receipt.duplicate
-        e = store.get_envelope(receipt.message_id)
-        assert e is not None
+        assert store.get_envelope(receipt.message_id) is not None
         assert store.status(receipt.message_id) == "published"
         assert store.attempts(receipt.message_id)[0].success
 
