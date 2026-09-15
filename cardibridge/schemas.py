@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel
+
 from .catalog import export_asyncapi as _export_asyncapi
 from .contracts import AgentChallenge, EvaluationRequest, EvaluationResult, VexObservation
 
-SCHEMAS = {
+SCHEMAS: dict[str, type[BaseModel]] = {
     "agent.challenge": AgentChallenge,
     "eval.request": EvaluationRequest,
     "eval.result": EvaluationResult,
