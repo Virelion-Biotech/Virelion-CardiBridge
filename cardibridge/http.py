@@ -9,14 +9,14 @@ from .router import BridgeRouter
 from .schemas import SCHEMAS
 
 
-def create_app():
+def create_app() -> Any:
     from fastapi import FastAPI, HTTPException
 
     registry = ContractRegistry()
     for name, model in SCHEMAS.items():
         registry.register(name, model)
     bridge_router = BridgeRouter(registry)
-    app = FastAPI(title="Virelion CardiBridge", version="0.2.0")
+    app = FastAPI(title="Virelion CardiBridge", version="0.3.0")
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -31,14 +31,14 @@ def create_app():
         return export_asyncapi(registry)
 
     @app.post("/validate/{contract}")
-    def validate(contract: str, payload: dict[str, Any]):
+    def validate(contract: str, payload: dict[str, Any]) -> Any:
         try:
             return registry.validate(contract, payload)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/envelope/validate")
-    def validate_envelope(envelope: BridgeEnvelope):
+    def validate_envelope(envelope: BridgeEnvelope) -> Any:
         return registry.validate(envelope.message_type, envelope.payload)
 
     @app.post("/route")
