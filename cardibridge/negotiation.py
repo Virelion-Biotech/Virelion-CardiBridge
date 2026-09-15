@@ -18,14 +18,14 @@ class NegotiatedContract:
 
 
 class ContractNegotiator:
-    """Select the safest mutually supported contract version."""
+    """Select the highest mutually supported semantic version."""
 
     def negotiate(self, producer: ContractCapability, consumer: ContractCapability) -> NegotiatedContract:
         if producer.name != consumer.name:
             raise ValueError(f"contract mismatch: {producer.name} != {consumer.name}")
         common = set(producer.versions).intersection(consumer.versions)
         if common:
-            version = sorted(common, key=self._version_key, reverse=True)[0]
+            version = max(common, key=self._version_key)
             return NegotiatedContract(producer.name, version, migrated=False)
         if producer.required or consumer.required:
             raise ValueError(f"no compatible version for {producer.name}")
