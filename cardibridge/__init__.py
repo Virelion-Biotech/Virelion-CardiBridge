@@ -16,7 +16,7 @@ from .production import ProductionRouter
 from .protocol import *
 from .provenance_chain import ProvenanceBlock, ProvenanceChain
 from .registry import ContractRegistry
-from .reliability import DeliveryAttempt, RetryPolicy
+from .reliability import DeliveryAttempt, RetryPolicy, attempt_with_retry
 from .router import BridgeRouter
 from .security_policy import Authorizer, Principal
 from .store import EventStore
@@ -29,6 +29,8 @@ from .transport import (
     NatsTransport,
     TransportHealth,
 )
+
+__version__ = "0.3.0"
 
 __all__ = [
     "AGENT_CHALLENGE",
@@ -81,6 +83,7 @@ __all__ = [
     "TransportHealth",
     "ValidationReport",
     "VexObservation",
+    "attempt_with_retry",
     "canonical_json",
     "content_hash",
     "create_app",
@@ -92,4 +95,5 @@ __all__ = [
     "partition_payload",
     "topic_for",
     "validate_batch",
+    "__version__",
 ]
