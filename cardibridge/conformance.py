@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+
+from pydantic import ValidationError
 
 from .contracts import BridgeEnvelope
 from .registry import ContractRegistry
@@ -27,9 +29,13 @@ def run_conformance(registry: ContractRegistry, cases: list[ConformanceCase]) ->
         try:
             report = registry.validate(case.contract, case.payload)
             passed = report.valid == case.expected_valid
-            results.append({"name": case.name, "passed": passed, "valid": report.valid, "errors": report.errors})
-        except Exception as exc:
-            results.append({"name": case.name, "passed": not case.expected_valid, "error": str(exc)})
+            results.append(
+                {"name": case.name, "passed": passed, "valid": report.valid, "errors": report.errors}
+            )
+        except (KeyError, ValidationError) as exc:
+            results.append(
+                {"name": case.name, "passed": not case.expected_valid, "error": str(exc)}
+            )
     return ConformanceResult(all(x["passed"] for x in results), tuple(results))
 
 
