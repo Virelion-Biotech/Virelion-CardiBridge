@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .batch import BatchResult, partition_payload, validate_batch
+from .catalog import export_asyncapi, export_catalog
 from .circuit_breaker import CircuitBreaker, CircuitState
 from .codec import EnvelopeCodec
 from .compatibility import CompatibilityManager, CompatibilityResult
@@ -85,6 +86,8 @@ __all__ = [
     "create_app",
     "default_registry",
     "envelope_digest",
+    "export_asyncapi",
+    "export_catalog",
     "health",
     "partition_payload",
     "topic_for",
