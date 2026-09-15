@@ -36,7 +36,7 @@ class ProvenanceChain:
         previous = self._blocks[-1].digest if self._blocks else "0" * 64
         created = datetime.now(timezone.utc).isoformat()
         payload_digest = self._digest(payload)
-        body = {
+        body: dict[str, int | str] = {
             "sequence": len(self._blocks),
             "event_id": event_id,
             "event_type": event_type,
@@ -46,13 +46,13 @@ class ProvenanceChain:
             "created_at": created,
         }
         block = ProvenanceBlock(
-            sequence=body["sequence"],
-            event_id=body["event_id"],
-            event_type=body["event_type"],
-            actor=body["actor"],
-            payload_digest=body["payload_digest"],
-            previous_digest=body["previous_digest"],
-            created_at=body["created_at"],
+            sequence=len(self._blocks),
+            event_id=event_id,
+            event_type=event_type,
+            actor=actor,
+            payload_digest=payload_digest,
+            previous_digest=previous,
+            created_at=created,
             digest=self._digest(body),
         )
         self._blocks.append(block)
@@ -70,7 +70,7 @@ class ProvenanceChain:
     def verify(self) -> bool:
         previous = "0" * 64
         for index, block in enumerate(self._blocks):
-            body = {
+            body: dict[str, int | str] = {
                 "sequence": block.sequence,
                 "event_id": block.event_id,
                 "event_type": block.event_type,
