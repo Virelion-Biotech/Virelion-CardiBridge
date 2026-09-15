@@ -21,7 +21,7 @@ class EnvelopeCodec:
             data = data.decode("utf-8")
         value: Any = json.loads(data)
         if not isinstance(value, dict):
-            raise ValueError("envelope wire representation must be a JSON object")
+            raise TypeError("envelope wire representation must be a JSON object")
         return BridgeEnvelope.model_validate(value)
 
     @classmethod
