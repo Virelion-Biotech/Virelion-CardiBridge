@@ -1,65 +1,92 @@
 # Virelion-CardiBridge
 
-CardiBridge is a typed interoperability and protocol library for exchanging structured computational messages. It defines versioned message contracts, validation, routing, persistence boundaries, and compatibility rules between components.
+CardiBridge is the contract-first interoperability layer for the Virelion computational cardiac stack. It standardizes typed messages, schema evolution, provenance, artifact references, execution context, routing, delivery semantics, and transport adapters without embedding cardiac algorithms or a specific broker.
 
 ## What it contains
 
-- Strict Pydantic message contracts.
-- Versioned contract registry and schema fingerprints.
-- Explicit migrations and compatibility checks.
-- Canonical JSON and SHA-256 payload identity.
-- HMAC signing and authorization primitives.
-- SQLite inbox/outbox/audit log.
-- Idempotent routing and replay.
-- Synchronous and asynchronous transport abstractions.
-- Persist-before-publish boundary for durable adapters.
-- Conformance tests and contract catalog export.
-- Delivery, validation, failure, and latency metrics.
+- Strict Pydantic message contracts with semantic versions.
+- Artifact references, workflow/task execution context, trace context, and lineage facets.
+- Runtime contract registry with validation and SHA-256 schema fingerprints.
+- Machine-readable contract catalog and AsyncAPI 3-compatible export.
+- Explicit compatibility negotiation and deterministic migrations.
+- Canonical JSON encoding, content identity, HMAC signing, and authorization primitives.
+- SQLite inbox/outbox/audit persistence with replay and delivery-attempt history.
+- Mandatory idempotency and at-least-once delivery semantics.
+- Bounded exponential retries with deterministic jitter and dead-letter handling.
+- In-memory, HTTP, callback, NATS-client, and Kafka-client transport adapters.
+- Circuit breaker, health/readiness, batching, conformance, and observability primitives.
+- Optional FastAPI gateway that exposes contract, validation, catalog, and routing endpoints.
 
-CardiBridge does not implement domain-specific cardiac algorithms.
+CardiBridge deliberately does **not** implement domain-specific cardiac algorithms or act as a workflow engine. Workflow orchestration belongs in a higher layer and can propagate its identity through `ExecutionContext`.
 
-## Protocol rules
+## Architecture
 
-1. Validate before dispatch.
-2. Persist before external publish where the durable adapter is used.
-3. Require an idempotency key.
-4. Treat schema evolution as an explicit migration.
-5. Carry trace and provenance metadata with messages.
-6. Use deterministic serialization for hashing/signing.
-7. Keep transport implementations separate from scientific contracts.
+```text
+CardiAgent / CardiVex / CardiEval / CardiLearn / HeartTwin
+                         |
+                         v
+                  +--------------+
+                  | CardiBridge   |
+                  |--------------|
+                  | Contracts     |
+                  | Validation    |
+                  | Compatibility |
+                  | Routing       |
+                  | Idempotency   |
+                  | Provenance    |
+                  | Delivery      |
+                  +------+-------+
+                         |
+          +--------------+--------------+
+          |              |              |
+         HTTP           NATS          Kafka
+          |              |              |
+          +--------------+--------------+
+                         |
+                    external infra
+```
 
 ## Installation
 
 ```bash
-pip install -e '.[test]'
+pip install -e '.[dev]'
 ```
 
-## Usage
+## Contract validation
+
+```bash
+cardibridge schema agent.challenge
+cardibridge asyncapi --output asyncapi.json
+cardibridge validate agent.challenge '{"challenge_type":"mi","population":[{"sample":"S1"}],"intended_task":"classify","trace":{"source":"CardiAgent"}}'
+```
+
+## Durable delivery
 
 ```python
-from cardibridge.builtin import default_registry
-from cardibridge.production import ProductionRouter
+from cardibridge import DurableTransportAdapter, EventStore, InMemoryTransport, RetryPolicy
 
-registry = default_registry()
-router = ProductionRouter(registry)
-router.register("example.message", "consumer", lambda envelope: {"accepted": True})
+store = EventStore("cardibridge.db")
+transport = DurableTransportAdapter(
+    store,
+    InMemoryTransport(),
+    retry_policy=RetryPolicy(max_attempts=5),
+)
+receipt = await transport.publish_with_retry(envelope)
 ```
 
-## Inputs and outputs
+The durable adapter persists before external publication, records every attempt, and moves exhausted deliveries to its dead-letter queue. Consumers should remain idempotent because the protocol is intentionally at-least-once.
 
-**Inputs:** versioned message envelopes, contract definitions, routing rules, idempotency keys, optional authorization/signing metadata, and transport configuration.
+## Interoperability
 
-**Outputs:** validated/canonicalized messages, routing results, persisted inbox/outbox/audit records, compatibility results, delivery metrics, and contract catalogs.
+The core contract model is independent of FastAPI, Kafka, NATS, RabbitMQ, Kubernetes, or cloud SDKs. Adapters translate between a selected transport and the same `BridgeEnvelope`. This keeps scientific contracts stable while infrastructure can evolve independently.
 
-## Validation
+## Provenance
 
-The repository includes contract conformance and compatibility tests. Messages are validated before dispatch, schema fingerprints are checked, and explicit migrations are required for incompatible schema evolution.
+Use `ArtifactRef` for datasets, models, feature tables, simulation outputs, and other potentially large artifacts. Use `ExecutionContext` for workflow/task identity and `LineageEvent` for run/job/input/output relationships. `ProvenanceChain` provides tamper-evident commitments and `EventStore` provides local persistence and replay.
 
-Protocol compliance does not establish scientific correctness or validity of the payload's domain content.
+## Validation and limitations
 
-## Limitations
-
-CardiBridge validates and transports structured messages; it does not validate the scientific meaning of domain-specific data. Authorization and signing primitives require appropriate key storage, rotation, and trust management in deployment. Transport reliability depends on the selected adapter and deployment environment.
+CI runs Ruff and pytest across supported Python versions. Protocol conformance does not establish scientific correctness. Scientific validity, model performance, data quality, and domain-specific safety remain the responsibility of the consuming service.
 
 ## License
 
