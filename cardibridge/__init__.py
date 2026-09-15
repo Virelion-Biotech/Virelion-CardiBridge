@@ -83,6 +83,7 @@ __all__ = [
     "TransportHealth",
     "ValidationReport",
     "VexObservation",
+    "__version__",
     "attempt_with_retry",
     "canonical_json",
     "content_hash",
@@ -95,5 +96,4 @@ __all__ = [
     "partition_payload",
     "topic_for",
     "validate_batch",
-    "__version__",
 ]
