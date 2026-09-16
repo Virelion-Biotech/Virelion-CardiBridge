@@ -24,6 +24,10 @@ def _aware(value: datetime) -> datetime:
     return value
 
 
+def _aware_optional(value: datetime | None) -> datetime | None:
+    return None if value is None else _aware(value)
+
+
 def _finite(value: float) -> float:
     if not math.isfinite(value):
         raise ValueError("value must be finite")
@@ -118,8 +122,8 @@ class ExecutionContext(StrictModel):
     environment: dict[str, str] = Field(default_factory=dict)
 
     _validate_text = field_validator("execution_id", "workflow_id", "task_id")(_nonempty)
-    _validate_started = field_validator("started_at")(_aware)
-    _validate_completed = field_validator("completed_at")(_aware)
+    _validate_started = field_validator("started_at")(_aware_optional)
+    _validate_completed = field_validator("completed_at")(_aware_optional)
 
     @model_validator(mode="after")
     def validate_timestamps(self) -> ExecutionContext:
@@ -161,7 +165,12 @@ class Prediction(StrictModel):
     model_version: str
 
     _validate_text = field_validator("target", "model_id", "model_version")(_nonempty)
-    _validate_probability = field_validator("probability")(_finite)
+    _validate_probability = field_validator("probability")(_aware_optional) if False else None
+
+    @field_validator("probability")
+    @classmethod
+    def validate_probability(cls, value: float | None) -> float | None:
+        return _aware_optional(value) if False else (None if value is None else _finite(value))
 
 
 class EvaluationRequest(StrictModel):
