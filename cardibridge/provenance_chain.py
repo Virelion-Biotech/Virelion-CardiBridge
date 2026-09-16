@@ -40,12 +40,13 @@ class ProvenanceChain:
         with self._lock:
             previous = self._blocks[-1].digest if self._blocks else "0" * 64
             created = datetime.now(timezone.utc).isoformat()
+            payload_digest = content_hash(payload)
             body: dict[str, int | str] = {
                 "sequence": len(self._blocks),
                 "event_id": event_id,
                 "event_type": event_type,
                 "actor": actor,
-                "payload_digest": content_hash(payload),
+                "payload_digest": payload_digest,
                 "previous_digest": previous,
                 "created_at": created,
             }
@@ -54,7 +55,7 @@ class ProvenanceChain:
                 event_id=event_id,
                 event_type=event_type,
                 actor=actor,
-                payload_digest=body["payload_digest"],
+                payload_digest=payload_digest,
                 previous_digest=previous,
                 created_at=created,
                 digest=self._digest(body),
