@@ -38,7 +38,7 @@ class FlakyTransport(InMemoryTransport):
     async def publish(self, message: BridgeEnvelope):
         self.calls += 1
         if self.calls <= self.failures:
-            raise RuntimeError(f"transient-{self.calls}")
+            raise DeliveryError(f"transient-{self.calls}")
         return await super().publish(message)
 
 
@@ -81,5 +81,30 @@ def test_retry_exhaustion_enters_dead_letter() -> None:
         item = dlq.get(message.message_id)
         assert item is not None
         assert len(item.attempts) == 2
+
+    asyncio.run(run())
+
+
+def test_non_delivery_errors_do_not_retry() -> None:
+    async def run() -> None:
+        class BrokenTransport(InMemoryTransport):
+            calls = 0
+
+            async def publish(self, envelope: BridgeEnvelope):
+                self.calls += 1
+                raise RuntimeError("programming-error")
+
+        store = EventStore()
+        transport = BrokenTransport()
+        with pytest.raises(RuntimeError, match="programming-error"):
+            await attempt_with_retry(
+                transport,
+                envelope("no-retry"),
+                store,
+                RetryPolicy(max_attempts=3, base_delay_seconds=0, jitter=0),
+                DeadLetterQueue(),
+            )
+        assert transport.calls == 1
+        assert store.status(envelope("unused").message_id) is None
 
     asyncio.run(run())
