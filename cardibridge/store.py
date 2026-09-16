@@ -41,9 +41,12 @@ class EventStore:
                 success INTEGER NOT NULL,
                 error TEXT,
                 attempted_at TEXT NOT NULL,
-                next_retry_at TEXT,
-                UNIQUE(message_id, attempt)
+                next_retry_at TEXT
             )"""
+        )
+        self.db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_attempts_message_attempt "
+            "ON delivery_attempts(message_id, attempt)"
         )
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_attempts_message ON delivery_attempts(message_id, attempt)")
         self.db.execute(
@@ -70,6 +73,7 @@ class EventStore:
     def append(self, envelope: BridgeEnvelope, status: str = "accepted") -> bool:
         raw = envelope.model_dump(mode="json")
         serialized = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        digest = content_hash(raw)
         with self._lock, self.db:
             try:
                 self.db.execute(
@@ -79,14 +83,21 @@ class EventStore:
                         envelope.message_id,
                         topic_for(envelope),
                         serialized,
-                        content_hash(raw),
+                        digest,
                         status,
                         datetime.now(timezone.utc).isoformat(),
                     ),
                 )
             except sqlite3.IntegrityError as exc:
-                if self.db.execute("SELECT 1 FROM events WHERE key=?", (envelope.idempotency_key,)).fetchone():
+                existing = self.db.execute(
+                    "SELECT digest FROM events WHERE key=?", (envelope.idempotency_key,)
+                ).fetchone()
+                if existing and existing[0] == digest:
                     return False
+                if existing:
+                    raise ValueError(
+                        "idempotency_key is already associated with a different envelope"
+                    ) from exc
                 raise ValueError("message_id is already associated with another idempotency key") from exc
             return True
 
