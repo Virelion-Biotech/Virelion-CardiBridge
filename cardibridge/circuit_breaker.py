@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import RLock
 from time import monotonic
 
 
@@ -11,7 +12,7 @@ class CircuitState:
 
 
 class CircuitBreaker:
-    """Small dependency-free circuit breaker for downstream Virelion services."""
+    """Thread-safe dependency-free circuit breaker."""
 
     def __init__(self, failure_threshold: int = 5, recovery_seconds: float = 30.0) -> None:
         if failure_threshold < 1 or recovery_seconds <= 0:
@@ -19,24 +20,27 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.recovery_seconds = recovery_seconds
         self.state = CircuitState()
+        self._lock = RLock()
 
     @property
     def open(self) -> bool:
-        if self.state.opened_at is None:
-            return False
-        if monotonic() - self.state.opened_at >= self.recovery_seconds:
-            self.state.opened_at = None
-            self.state.failures = 0
-            return False
-        return True
+        with self._lock:
+            if self.state.opened_at is None:
+                return False
+            if monotonic() - self.state.opened_at >= self.recovery_seconds:
+                self.state = CircuitState()
+                return False
+            return True
 
     def allow(self) -> bool:
         return not self.open
 
     def success(self) -> None:
-        self.state = CircuitState()
+        with self._lock:
+            self.state = CircuitState()
 
     def failure(self) -> None:
-        self.state.failures += 1
-        if self.state.failures >= self.failure_threshold:
-            self.state.opened_at = monotonic()
+        with self._lock:
+            self.state.failures += 1
+            if self.state.failures >= self.failure_threshold:
+                self.state.opened_at = monotonic()
