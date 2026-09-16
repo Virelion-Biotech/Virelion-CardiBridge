@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from threading import RLock
 from typing import TYPE_CHECKING, Any
 
 from .contracts import BridgeEnvelope
@@ -27,27 +29,41 @@ class DeadLetter:
             "reason": self.reason,
             "attempts": [a.as_dict() for a in self.attempts],
             "created_at": self.created_at.isoformat(),
-            "metadata": self.metadata or {},
+            "metadata": dict(self.metadata or {}),
         }
 
 
 class DeadLetterQueue:
-    """In-process DLQ abstraction; production transports can persist/stream these records."""
+    """Thread-safe in-process DLQ abstraction."""
 
-    def __init__(self) -> None:
-        self._items: dict[str, DeadLetter] = {}
+    def __init__(self, max_items: int = 10_000) -> None:
+        if max_items < 1:
+            raise ValueError("max_items must be >= 1")
+        self.max_items = max_items
+        self._items: OrderedDict[str, DeadLetter] = OrderedDict()
+        self._lock = RLock()
 
     def put(self, item: DeadLetter) -> None:
-        self._items[item.envelope.message_id] = item
+        with self._lock:
+            self._items.pop(item.envelope.message_id, None)
+            self._items[item.envelope.message_id] = item
+            while len(self._items) > self.max_items:
+                self._items.popitem(last=False)
 
     def get(self, message_id: str) -> DeadLetter | None:
-        return self._items.get(message_id)
+        with self._lock:
+            return self._items.get(message_id)
 
     def list(self, limit: int = 100) -> list[DeadLetter]:
-        return list(self._items.values())[-limit:]
+        if limit < 1:
+            return []
+        with self._lock:
+            return list(self._items.values())[-limit:]
 
     def remove(self, message_id: str) -> DeadLetter | None:
-        return self._items.pop(message_id, None)
+        with self._lock:
+            return self._items.pop(message_id, None)
 
     def __len__(self) -> int:
-        return len(self._items)
+        with self._lock:
+            return len(self._items)
