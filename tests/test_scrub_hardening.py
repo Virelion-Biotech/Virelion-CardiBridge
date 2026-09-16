@@ -5,7 +5,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from cardibridge import AgentChallenge, BridgeEnvelope, BridgeRouter, DeliveryError, ExecutionContext, TraceContext
+from cardibridge import (
+    AgentChallenge,
+    BridgeEnvelope,
+    BridgeRouter,
+    DeliveryError,
+    ExecutionContext,
+    TraceContext,
+)
 from cardibridge.async_router import AsyncBridgeRouter
 from cardibridge.observability import BridgeMetrics
 from cardibridge.registry import ContractRegistry
@@ -73,6 +80,25 @@ def test_async_router_retries_after_handler_failure() -> None:
             await router.dispatch(envelope())
         assert await router.dispatch(envelope()) == "ok"
         assert calls == 2
+
+    asyncio.run(run())
+
+
+def test_async_router_deduplicates_after_success() -> None:
+    async def run() -> None:
+        router = AsyncBridgeRouter(registry())
+        calls = 0
+
+        async def handler(_: BridgeEnvelope) -> str:
+            nonlocal calls
+            calls += 1
+            return "ok"
+
+        router.register("agent.challenge", "worker", handler)
+        message = envelope("success-once")
+        assert await router.dispatch(message) == "ok"
+        assert await router.dispatch(message)["status"] == "duplicate"
+        assert calls == 1
 
     asyncio.run(run())
 
