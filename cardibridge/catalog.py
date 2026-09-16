@@ -6,30 +6,33 @@ from .registry import ContractRegistry
 
 
 def export_catalog(registry: ContractRegistry) -> dict[str, Any]:
-    """Return a stable machine-readable contract catalog."""
+    """Return the stable machine-readable contract catalog."""
     contracts: dict[str, Any] = {}
-    for name in sorted(registry._schemas):
-        model = registry.model(name)
+    for name in registry.names():
         contracts[name] = {
-            "version": registry._versions[name],
+            "version": registry.version(name),
             "fingerprint": registry.fingerprint(name),
-            "schema": model.model_json_schema(),
+            "schema": registry.model(name).model_json_schema(),
         }
-    return {"protocol": "virelion-cardibridge", "version": "1.0.0", "contracts": contracts}
+    return {
+        "protocol": "virelion-cardibridge",
+        "version": "1.0.0",
+        "contracts": contracts,
+    }
 
 
 def export_asyncapi(registry: ContractRegistry) -> dict[str, Any]:
-    """Build an AsyncAPI-compatible contract description without coupling the core to AsyncAPI tooling."""
+    """Build a dependency-free AsyncAPI-compatible contract description."""
     messages: dict[str, Any] = {}
     channels: dict[str, Any] = {}
-    for name in sorted(registry._schemas):
+    for name in registry.names():
         message_name = name.replace(".", "_")
         messages[message_name] = {
             "name": message_name,
             "title": name,
             "contentType": "application/json",
             "payload": registry.model(name).model_json_schema(),
-            "x-cardibridge-version": registry._versions[name],
+            "x-cardibridge-version": registry.version(name),
             "x-cardibridge-fingerprint": registry.fingerprint(name),
         }
         channels[name] = {
