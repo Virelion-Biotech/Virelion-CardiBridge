@@ -6,7 +6,7 @@ from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -140,7 +140,7 @@ class HttpTransport:
         request = Request(self.endpoint, data=body, method="POST", headers=request_headers)
         try:
             with urlopen(request, timeout=self.timeout_seconds) as response:
-                return response.read()
+                return cast(bytes, response.read())
         except (HTTPError, URLError, TimeoutError, OSError) as exc:
             raise DeliveryError(str(exc)) from exc
 
