@@ -41,7 +41,7 @@ class RetryPolicy:
         delay = min(self.max_delay_seconds, self.base_delay_seconds * multiplier)
         if not key or self.jitter == 0 or delay == 0:
             return delay
-        digest = hashlib.sha256(f"{key}:{attempt}".encode("utf-8")).digest()
+        digest = hashlib.sha256(f"{key}:{attempt}".encode()).digest()
         fraction = int.from_bytes(digest[:8], "big") / 2**64
         factor = 1.0 + ((fraction * 2.0) - 1.0) * self.jitter
         return max(0.0, min(self.max_delay_seconds, delay * factor))
@@ -115,7 +115,7 @@ async def attempt_with_retry(
         attempted_at = datetime.now(timezone.utc)
         try:
             receipt = await transport.publish(envelope)
-        except Exception as exc:
+        except DeliveryError as exc:
             next_retry_at = (
                 retry.next_retry_at(attempt_number, now=attempted_at, key=envelope.idempotency_key)
                 if attempt_number < retry.max_attempts
