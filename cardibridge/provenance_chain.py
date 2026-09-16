@@ -6,7 +6,7 @@ from threading import RLock
 from typing import Any
 
 from .contracts import LineageEvent
-from .protocol import content_hash, canonical_json
+from .protocol import canonical_json, content_hash
 
 
 @dataclass(frozen=True)
