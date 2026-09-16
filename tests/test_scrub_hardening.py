@@ -4,14 +4,7 @@ import asyncio
 
 import pytest
 
-from cardibridge import (
-    AgentChallenge,
-    BridgeEnvelope,
-    BridgeRouter,
-    ContractRegistry,
-    ExecutionContext,
-    TraceContext,
-)
+from cardibridge import AgentChallenge, BridgeEnvelope, BridgeRouter, ExecutionContext, TraceContext
 from cardibridge.async_router import AsyncBridgeRouter
 from cardibridge.observability import BridgeMetrics
 from cardibridge.registry import ContractRegistry
@@ -94,10 +87,10 @@ def test_registry_rejects_same_version_with_changed_model() -> None:
     class Alternate(AgentChallenge):
         alternate: str = "x"
 
-    registry = ContractRegistry()
-    registry.register("agent.challenge", AgentChallenge, "1.0.0")
+    reg = ContractRegistry()
+    reg.register("agent.challenge", AgentChallenge, "1.0.0")
     with pytest.raises(ValueError):
-        registry.register("agent.challenge", Alternate, "1.0.0")
+        reg.register("agent.challenge", Alternate, "1.0.0")
 
 
 def test_validation_report_serializes_schema_key() -> None:
