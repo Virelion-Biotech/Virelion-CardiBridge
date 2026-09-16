@@ -17,6 +17,12 @@ def _nonempty(value: str) -> str:
     return value
 
 
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("datetime must be timezone-aware")
+    return value
+
+
 class TraceContext(StrictModel):
     trace_id: str = Field(default_factory=lambda: uuid4().hex)
     span_id: str = Field(default_factory=lambda: uuid4().hex[:16])
@@ -27,6 +33,7 @@ class TraceContext(StrictModel):
     provenance: dict[str, Any] = Field(default_factory=dict)
 
     _validate_source = field_validator("source")(_nonempty)
+    _validate_created_at = field_validator("created_at")(_aware)
 
 
 class ArtifactRef(StrictModel):
@@ -71,6 +78,7 @@ class LineageEvent(StrictModel):
     _validate_text = field_validator(
         "event_id", "run_id", "job_namespace", "job_name", "producer"
     )(_nonempty)
+    _validate_event_time = field_validator("event_time")(_aware)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -103,6 +111,8 @@ class ExecutionContext(StrictModel):
     environment: dict[str, str] = Field(default_factory=dict)
 
     _validate_text = field_validator("execution_id", "workflow_id", "task_id")(_nonempty)
+    _validate_started = field_validator("started_at")(_aware)
+    _validate_completed = field_validator("completed_at")(_aware)
 
     @model_validator(mode="after")
     def validate_timestamps(self) -> ExecutionContext:
@@ -187,7 +197,7 @@ class ValidationReport(StrictModel):
     )
 
     @property
-    def schema(self) -> str:
+    def schema(self) -> str:  # type: ignore[override]
         return self.schema_name
 
 
@@ -207,6 +217,7 @@ class BridgeEnvelope(StrictModel):
     _validate_text = field_validator(
         "message_id", "message_type", "producer", "consumer", "idempotency_key"
     )(_nonempty)
+    _validate_timestamp = field_validator("timestamp")(_aware)
 
     @field_validator("idempotency_key")
     @classmethod
