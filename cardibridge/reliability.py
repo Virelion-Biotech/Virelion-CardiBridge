@@ -97,32 +97,50 @@ async def attempt_with_retry(
     retry: RetryPolicy,
     dead_letter: DeadLetterQueue,
 ) -> DeliveryReceipt:
-    """Persist an outbox record, publish with bounded retry, and capture terminal failures."""
+    """Persist an outbox record, resume existing retries, and capture terminal failures."""
     accepted = store.append(envelope, status="outbox")
-    if not accepted:
-        stored = store.get_envelope(envelope.message_id)
-        return DeliveryReceipt(
-            envelope.message_id,
-            envelope.idempotency_key,
-            topic_for(stored or envelope),
-            (stored or envelope).timestamp.isoformat(),
-            duplicate=True,
-            sequence=None,
-        )
+    current = envelope
+    prior_attempts: list[DeliveryAttempt] = []
 
-    attempts: list[DeliveryAttempt] = []
-    for attempt_number in range(1, retry.max_attempts + 1):
+    if not accepted:
+        status = store.status_by_key(envelope.idempotency_key)
+        stored = store.get_envelope(envelope.message_id)
+        if stored is None:
+            raise ValueError("idempotency record exists but its envelope is missing")
+        if status in {"published", "dead_letter", "processed", "processing"}:
+            return DeliveryReceipt(
+                stored.message_id,
+                stored.idempotency_key,
+                topic_for(stored),
+                stored.timestamp.isoformat(),
+                duplicate=True,
+                sequence=None,
+            )
+        if status not in {"outbox", "retry"}:
+            raise ValueError(f"cannot resume delivery in status {status!r}")
+        current = stored
+        prior_attempts = store.attempts(stored.message_id)
+
+    if len(prior_attempts) >= retry.max_attempts:
+        reason = prior_attempts[-1].error if prior_attempts else "retry budget exhausted"
+        store.mark(current.message_id, "dead_letter")
+        dead_letter.put(DeadLetter(envelope=current, reason=reason or "retry budget exhausted", attempts=tuple(prior_attempts)))
+        raise DeliveryError(reason or "retry budget exhausted")
+
+    attempts = list(prior_attempts)
+    start = len(attempts) + 1
+    for attempt_number in range(start, retry.max_attempts + 1):
         attempted_at = datetime.now(timezone.utc)
         try:
-            receipt = await transport.publish(envelope)
+            receipt = await transport.publish(current)
         except DeliveryError as exc:
             next_retry_at = (
-                retry.next_retry_at(attempt_number, now=attempted_at, key=envelope.idempotency_key)
+                retry.next_retry_at(attempt_number, now=attempted_at, key=current.idempotency_key)
                 if attempt_number < retry.max_attempts
                 else None
             )
             attempt = DeliveryAttempt(
-                message_id=envelope.message_id,
+                message_id=current.message_id,
                 attempt=attempt_number,
                 success=False,
                 error=str(exc),
@@ -132,24 +150,24 @@ async def attempt_with_retry(
             attempts.append(attempt)
             store.record_attempt(attempt)
             if next_retry_at is None:
-                store.mark(envelope.message_id, "dead_letter")
+                store.mark(current.message_id, "dead_letter")
                 dead_letter.put(
-                    DeadLetter(envelope=envelope, reason=str(exc), attempts=tuple(attempts))
+                    DeadLetter(envelope=current, reason=str(exc), attempts=tuple(attempts))
                 )
                 raise DeliveryError(str(exc)) from exc
-            store.mark(envelope.message_id, "retry")
+            store.mark(current.message_id, "retry")
             await asyncio.sleep(
                 max(0.0, (next_retry_at - datetime.now(timezone.utc)).total_seconds())
             )
         else:
             attempt = DeliveryAttempt(
-                message_id=envelope.message_id,
+                message_id=current.message_id,
                 attempt=attempt_number,
                 success=True,
                 attempted_at=attempted_at,
             )
             store.record_attempt(attempt)
-            store.mark(envelope.message_id, "published")
+            store.mark(current.message_id, "published")
             return receipt
 
     raise RuntimeError("retry loop exited without terminal result")
