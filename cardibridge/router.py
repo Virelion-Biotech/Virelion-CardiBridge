@@ -10,19 +10,23 @@ Handler = Callable[[BridgeEnvelope], Any]
 
 
 class BridgeRouter:
-    """Deterministic in-process router with validation and idempotency protection."""
+    """Deterministic in-process router with validation and failure-safe idempotency."""
 
     def __init__(self, registry: ContractRegistry) -> None:
         self.registry = registry
         self._handlers: dict[tuple[str, str], Handler] = {}
         self._seen: set[str] = set()
+        self._processing: set[str] = set()
 
     def register(self, message_type: str, consumer: str, handler: Handler) -> None:
+        self.registry.model(message_type)
         self._handlers[(message_type, consumer)] = handler
 
     def dispatch(self, envelope: BridgeEnvelope) -> Any:
-        if envelope.idempotency_key in self._seen:
+        key = envelope.idempotency_key
+        if key in self._seen or key in self._processing:
             return {"status": "duplicate", "message_id": envelope.message_id}
+
         report = self.registry.validate(envelope.message_type, envelope.payload)
         if not report.valid:
             raise ValueError(report.model_dump_json())
@@ -31,8 +35,17 @@ class BridgeRouter:
             raise LookupError(
                 f"no handler for {envelope.message_type!r} -> {envelope.consumer!r}"
             )
-        self._seen.add(envelope.idempotency_key)
-        return handler(envelope)
+
+        self._processing.add(key)
+        try:
+            result = handler(envelope)
+        except Exception:
+            self._processing.remove(key)
+            raise
+        else:
+            self._processing.remove(key)
+            self._seen.add(key)
+            return result
 
     @property
     def processed_keys(self) -> frozenset[str]:
