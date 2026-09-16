@@ -52,13 +52,18 @@ class InMemoryTransport:
             )
         self._seen_keys.add(envelope.idempotency_key)
         self.messages.append(envelope)
-        for callback in tuple(self.subscribers.get(topic, ())):
-            await callback(envelope)
+        try:
+            for callback in tuple(self.subscribers.get(topic, ())):
+                await callback(envelope)
+        except Exception as exc:
+            raise DeliveryError(str(exc)) from exc
         for queue in tuple(self._queues.get(topic, ())):
             queue.put_nowait(envelope)
         return DeliveryReceipt(envelope.message_id, envelope.idempotency_key, topic, now)
 
     def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
+        if not topic.strip():
+            raise ValueError("topic must not be empty")
         queue: asyncio.Queue[BridgeEnvelope] = asyncio.Queue()
         self._queues[topic].append(queue)
 
@@ -89,7 +94,10 @@ class CallbackTransport:
         self.callback = callback
 
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
-        await self.callback(envelope)
+        try:
+            await self.callback(envelope)
+        except Exception as exc:
+            raise DeliveryError(str(exc)) from exc
         return DeliveryReceipt(
             envelope.message_id,
             envelope.idempotency_key,
@@ -183,7 +191,10 @@ class NatsTransport:
         from .codec import EnvelopeCodec
 
         topic = topic_for(envelope)
-        await self.client.publish(topic, EnvelopeCodec.encode(envelope))
+        try:
+            await self.client.publish(topic, EnvelopeCodec.encode(envelope))
+        except Exception as exc:
+            raise DeliveryError(str(exc)) from exc
         return DeliveryReceipt(
             envelope.message_id,
             envelope.idempotency_key,
@@ -214,7 +225,10 @@ class KafkaTransport:
         from .codec import EnvelopeCodec
 
         topic = topic_for(envelope)
-        await self.producer.send_and_wait(topic, EnvelopeCodec.encode(envelope))
+        try:
+            await self.producer.send_and_wait(topic, EnvelopeCodec.encode(envelope))
+        except Exception as exc:
+            raise DeliveryError(str(exc)) from exc
         return DeliveryReceipt(
             envelope.message_id,
             envelope.idempotency_key,
