@@ -11,7 +11,6 @@ from typing import Any
 from .catalog import export_asyncapi, export_catalog
 from .contracts import BridgeEnvelope
 from .defaults import default_registry
-from .registry import ContractRegistry
 from .router import BridgeRouter
 
 
@@ -27,11 +26,7 @@ def create_app() -> Any:
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {
-            "status": "ok",
-            "service": "CardiBridge",
-            "contracts": len(registry.names()),
-        }
+        return {"status": "ok", "service": "CardiBridge", "contracts": len(registry.names())}
 
     @app.get("/contracts")
     def contracts() -> dict[str, Any]:
