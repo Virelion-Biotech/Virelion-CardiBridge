@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 
-from cardibridge import AgentChallenge, BridgeEnvelope, BridgeRouter, ExecutionContext, TraceContext
+from cardibridge import AgentChallenge, BridgeEnvelope, BridgeRouter, DeliveryError, ExecutionContext, TraceContext
 from cardibridge.async_router import AsyncBridgeRouter
 from cardibridge.observability import BridgeMetrics
 from cardibridge.registry import ContractRegistry
+from cardibridge.reliability import RetryPolicy
 from cardibridge.store import EventStore
 
 
-def envelope(key: str = "k1") -> BridgeEnvelope:
+def envelope(key: str = "k1", *, timestamp: datetime | None = None) -> BridgeEnvelope:
     trace = TraceContext(source="test")
     payload = AgentChallenge(
         challenge_type="scrub",
@@ -26,6 +28,7 @@ def envelope(key: str = "k1") -> BridgeEnvelope:
         idempotency_key=key,
         payload=payload,
         trace=trace,
+        timestamp=timestamp or datetime.now(timezone.utc),
     )
 
 
@@ -83,6 +86,15 @@ def test_store_claim_is_single_winner() -> None:
     assert store.status(message.message_id) == "processing"
 
 
+def test_store_rejects_conflicting_envelope_for_same_idempotency_key() -> None:
+    store = EventStore()
+    first = envelope("same-key", timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    second = envelope("same-key", timestamp=datetime(2026, 1, 2, tzinfo=timezone.utc))
+    assert store.append(first)
+    with pytest.raises(ValueError, match="different envelope"):
+        store.append(second)
+
+
 def test_registry_rejects_same_version_with_changed_model() -> None:
     class Alternate(AgentChallenge):
         alternate: str = "x"
@@ -108,6 +120,16 @@ def test_metrics_reject_unknown_names_and_bound_latency() -> None:
     metrics.latency(0.0)
     metrics.latency(0.0)
     assert metrics.snapshot()["latency_ms"]["count"] == 2
+
+
+def test_retry_policy_rejects_inverted_bounds() -> None:
+    with pytest.raises(ValueError):
+        RetryPolicy(base_delay_seconds=2, max_delay_seconds=1)
+
+
+def test_delivery_error_is_distinct_from_programming_error() -> None:
+    assert issubclass(DeliveryError, Exception)
+    assert not issubclass(DeliveryError, RuntimeError)
 
 
 def test_execution_timestamps_are_consistent() -> None:
