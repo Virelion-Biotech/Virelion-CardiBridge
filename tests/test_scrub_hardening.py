@@ -97,7 +97,8 @@ def test_async_router_deduplicates_after_success() -> None:
         router.register("agent.challenge", "worker", handler)
         message = envelope("success-once")
         assert await router.dispatch(message) == "ok"
-        assert await router.dispatch(message)["status"] == "duplicate"
+        duplicate = await router.dispatch(message)
+        assert duplicate["status"] == "duplicate"
         assert calls == 1
 
     asyncio.run(run())
