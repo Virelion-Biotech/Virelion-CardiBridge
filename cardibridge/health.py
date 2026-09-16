@@ -35,13 +35,13 @@ def health(registry: ContractRegistry, store: EventStore | None = None) -> Healt
     if store is not None:
         try:
             store.list_events(limit=1)
-        except sqlite3.Error:
+        except (sqlite3.Error, ValueError):
             store_ok = False
     return HealthSnapshot(
         "ok" if store_ok else "degraded",
         PROTOCOL_NAME,
         PROTOCOL_VERSION,
-        len(registry._schemas),
+        len(registry.names()),
         datetime.now(timezone.utc),
         store_ok,
     )
@@ -69,6 +69,8 @@ class Readiness:
         latency_ms: float | None = None,
         detail: str | None = None,
     ) -> None:
+        if not name.strip():
+            raise ValueError("dependency name must not be empty")
         self.dependencies[name] = DependencyHealth(name, healthy, latency_ms, detail)
 
     @property
@@ -79,7 +81,7 @@ class Readiness:
         uptime = (datetime.now(timezone.utc) - self.started_at).total_seconds()
         return {
             "ready": self.ready,
-            "uptime_seconds": round(uptime, 3),
+            "uptime_seconds": round(max(0.0, uptime), 3),
             "dependencies": {
                 name: item.__dict__.copy() for name, item in self.dependencies.items()
             },
