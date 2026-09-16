@@ -11,26 +11,41 @@ AsyncHandler = Callable[[BridgeEnvelope], Awaitable[Any]]
 
 
 class AsyncBridgeRouter:
-    """Async counterpart of BridgeRouter for queue/network adapters."""
+    """Async router with serialized idempotency claims and retry-safe failures."""
 
     def __init__(self, registry: ContractRegistry) -> None:
         self.registry = registry
         self._handlers: dict[tuple[str, str], AsyncHandler] = {}
         self._seen: set[str] = set()
+        self._processing: set[str] = set()
         self._lock = asyncio.Lock()
 
     def register(self, message_type: str, consumer: str, handler: AsyncHandler) -> None:
+        self.registry.model(message_type)
         self._handlers[(message_type, consumer)] = handler
 
     async def dispatch(self, envelope: BridgeEnvelope) -> Any:
+        key = envelope.idempotency_key
         async with self._lock:
-            if envelope.idempotency_key in self._seen:
+            if key in self._seen or key in self._processing:
                 return {"status": "duplicate", "message_id": envelope.message_id}
             report = self.registry.validate(envelope.message_type, envelope.payload)
             if not report.valid:
                 raise ValueError(report.model_dump_json())
             handler = self._handlers.get((envelope.message_type, envelope.consumer))
             if handler is None:
-                raise LookupError(f"no handler for {envelope.message_type} -> {envelope.consumer}")
-            self._seen.add(envelope.idempotency_key)
-        return await handler(envelope)
+                raise LookupError(
+                    f"no handler for {envelope.message_type!r} -> {envelope.consumer!r}"
+                )
+            self._processing.add(key)
+
+        try:
+            return await handler(envelope)
+        except Exception:
+            async with self._lock:
+                self._processing.discard(key)
+            raise
+        else:
+            async with self._lock:
+                self._processing.discard(key)
+                self._seen.add(key)
