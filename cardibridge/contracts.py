@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
@@ -20,6 +21,12 @@ def _nonempty(value: str) -> str:
 def _aware(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("datetime must be timezone-aware")
+    return value
+
+
+def _finite(value: float) -> float:
+    if not math.isfinite(value):
+        raise ValueError("value must be finite")
     return value
 
 
@@ -131,6 +138,7 @@ class VexObservation(StrictModel):
     trace: TraceContext
 
     _validate_text = field_validator("observation_id", "challenge_type")(_nonempty)
+    _validate_numbers = field_validator("severity", "confidence")(_finite)
 
 
 class AgentChallenge(StrictModel):
@@ -153,6 +161,7 @@ class Prediction(StrictModel):
     model_version: str
 
     _validate_text = field_validator("target", "model_id", "model_version")(_nonempty)
+    _validate_probability = field_validator("probability")(_finite)
 
 
 class EvaluationRequest(StrictModel):
@@ -181,6 +190,15 @@ class EvaluationResult(StrictModel):
     trace: TraceContext
 
     _validate_text = field_validator("evaluation_id")(_nonempty)
+
+    @field_validator("metrics")
+    @classmethod
+    def validate_metrics(cls, value: dict[str, float]) -> dict[str, float]:
+        for name, metric in value.items():
+            if not name.strip():
+                raise ValueError("metric names must not be empty")
+            _finite(metric)
+        return value
 
 
 class ValidationReport(StrictModel):
