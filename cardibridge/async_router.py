@@ -22,6 +22,8 @@ class AsyncBridgeRouter:
 
     def register(self, message_type: str, consumer: str, handler: AsyncHandler) -> None:
         self.registry.model(message_type)
+        if not consumer.strip():
+            raise ValueError("consumer must not be empty")
         self._handlers[(message_type, consumer)] = handler
 
     async def dispatch(self, envelope: BridgeEnvelope) -> Any:
@@ -40,7 +42,7 @@ class AsyncBridgeRouter:
             self._processing.add(key)
 
         try:
-            return await handler(envelope)
+            result = await handler(envelope)
         except Exception:
             async with self._lock:
                 self._processing.discard(key)
@@ -49,3 +51,8 @@ class AsyncBridgeRouter:
             async with self._lock:
                 self._processing.discard(key)
                 self._seen.add(key)
+            return result
+
+    @property
+    def processed_keys(self) -> frozenset[str]:
+        return frozenset(self._seen)
