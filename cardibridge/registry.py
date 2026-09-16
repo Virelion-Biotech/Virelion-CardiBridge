@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -9,22 +10,33 @@ from pydantic import BaseModel, ValidationError
 from .contracts import BridgeEnvelope, ValidationReport
 
 T = TypeVar("T", bound=BaseModel)
+_SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
 class ContractRegistry:
-    """Runtime registry for versioned message contracts and safe validation."""
+    """Runtime registry for immutable, versioned message contracts."""
 
     def __init__(self) -> None:
         self._schemas: dict[str, type[BaseModel]] = {}
         self._versions: dict[str, str] = {}
+        self._fingerprints: dict[str, str] = {}
 
     def register(self, name: str, model: type[BaseModel], version: str = "1.0.0") -> None:
-        if not name or not version:
+        if not name.strip() or not version.strip():
             raise ValueError("contract name and version are required")
-        if name in self._schemas and self._versions[name] != version:
-            raise ValueError(f"contract {name} is already registered at another version")
+        if not _SEMVER.fullmatch(version):
+            raise ValueError(f"invalid semantic version: {version}")
+        if not isinstance(model, type) or not issubclass(model, BaseModel):
+            raise TypeError("model must be a Pydantic BaseModel subclass")
+
+        fingerprint = self._fingerprint_model(model)
+        if name in self._schemas:
+            if self._versions[name] != version or self._fingerprints[name] != fingerprint:
+                raise ValueError(f"contract {name} is immutable once registered")
+            return
         self._schemas[name] = model
         self._versions[name] = version
+        self._fingerprints[name] = fingerprint
 
     def model(self, name: str) -> type[BaseModel]:
         try:
@@ -36,6 +48,9 @@ class ContractRegistry:
         self.model(name)
         return self._versions[name]
 
+    def names(self) -> tuple[str, ...]:
+        return tuple(sorted(self._schemas))
+
     def validate(self, name: str, payload: dict[str, Any]) -> ValidationReport:
         model = self.model(name)
         version = self._versions[name]
@@ -46,23 +61,33 @@ class ContractRegistry:
                 valid=False,
                 schema=name,
                 schema_version=version,
-                errors=[{"type": error["type"], "message": error["msg"], "loc": error["loc"]} for error in exc.errors()],
+                errors=[
+                    {"type": error["type"], "message": error["msg"], "loc": error["loc"]}
+                    for error in exc.errors()
+                ],
             )
         return ValidationReport(valid=True, schema=name, schema_version=version)
 
     def fingerprint(self, name: str) -> str:
-        schema = self.model(name).model_json_schema()
-        canonical = json.dumps(schema, sort_keys=True, separators=(",", ":")).encode()
+        self.model(name)
+        return self._fingerprints[name]
+
+    @staticmethod
+    def _fingerprint_model(model: type[BaseModel]) -> str:
+        schema = model.model_json_schema()
+        canonical = json.dumps(
+            schema, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
         return hashlib.sha256(canonical).hexdigest()
 
     def catalog(self) -> dict[str, dict[str, Any]]:
         return {
             name: {
                 "version": self._versions[name],
-                "fingerprint": self.fingerprint(name),
+                "fingerprint": self._fingerprints[name],
                 "schema": self.model(name).model_json_schema(),
             }
-            for name in sorted(self._schemas)
+            for name in self.names()
         }
 
     def wrap(
@@ -75,12 +100,15 @@ class ContractRegistry:
         idempotency_key: str,
         trace: Any,
     ) -> BridgeEnvelope:
-        self.model(name).model_validate(payload.model_dump())
+        model = self.model(name)
+        if not isinstance(payload, model):
+            raise TypeError(f"payload must be an instance of {model.__name__}")
+        validated = model.model_validate(payload.model_dump(mode="json"))
         return BridgeEnvelope(
             message_type=name,
             producer=producer,
             consumer=consumer,
             idempotency_key=idempotency_key,
-            payload=payload.model_dump(mode="json"),
+            payload=validated.model_dump(mode="json"),
             trace=trace,
         )
