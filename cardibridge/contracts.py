@@ -4,11 +4,17 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+
+def _nonempty(value: str) -> str:
+    if not value.strip():
+        raise ValueError("value must not be empty")
+    return value
 
 
 class TraceContext(StrictModel):
@@ -19,6 +25,8 @@ class TraceContext(StrictModel):
     schema_version: str = "1.0.0"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     provenance: dict[str, Any] = Field(default_factory=dict)
+
+    _validate_source = field_validator("source")(_nonempty)
 
 
 class ArtifactRef(StrictModel):
@@ -33,11 +41,17 @@ class ArtifactRef(StrictModel):
     version: str = "1.0.0"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    _validate_text = field_validator("artifact_id", "uri", "media_type", "producer", "version")(
+        _nonempty
+    )
+
 
 class LineageFacet(StrictModel):
     name: str
     value: dict[str, Any]
     version: str = "1.0.0"
+
+    _validate_text = field_validator("name", "version")(_nonempty)
 
 
 class LineageEvent(StrictModel):
@@ -53,6 +67,10 @@ class LineageEvent(StrictModel):
     inputs: list[ArtifactRef] = Field(default_factory=list)
     outputs: list[ArtifactRef] = Field(default_factory=list)
     facets: list[LineageFacet] = Field(default_factory=list)
+
+    _validate_text = field_validator(
+        "event_id", "run_id", "job_namespace", "job_name", "producer"
+    )(_nonempty)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -84,6 +102,14 @@ class ExecutionContext(StrictModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     environment: dict[str, str] = Field(default_factory=dict)
 
+    _validate_text = field_validator("execution_id", "workflow_id", "task_id")(_nonempty)
+
+    @model_validator(mode="after")
+    def validate_timestamps(self) -> ExecutionContext:
+        if self.started_at and self.completed_at and self.completed_at < self.started_at:
+            raise ValueError("completed_at cannot precede started_at")
+        return self
+
 
 class VexObservation(StrictModel):
     observation_id: str = Field(default_factory=lambda: uuid4().hex)
@@ -94,6 +120,8 @@ class VexObservation(StrictModel):
     confidence: float = Field(ge=0, le=1)
     trace: TraceContext
 
+    _validate_text = field_validator("observation_id", "challenge_type")(_nonempty)
+
 
 class AgentChallenge(StrictModel):
     challenge_id: str = Field(default_factory=lambda: uuid4().hex)
@@ -103,6 +131,8 @@ class AgentChallenge(StrictModel):
     intended_task: str
     trace: TraceContext
 
+    _validate_text = field_validator("challenge_id", "challenge_type", "intended_task")(_nonempty)
+
 
 class Prediction(StrictModel):
     target: str
@@ -111,6 +141,8 @@ class Prediction(StrictModel):
     uncertainty: dict[str, Any] = Field(default_factory=dict)
     model_id: str
     model_version: str
+
+    _validate_text = field_validator("target", "model_id", "model_version")(_nonempty)
 
 
 class EvaluationRequest(StrictModel):
@@ -124,6 +156,8 @@ class EvaluationRequest(StrictModel):
     execution: ExecutionContext | None = None
     trace: TraceContext
 
+    _validate_text = field_validator("evaluation_id", "task")(_nonempty)
+
 
 class EvaluationResult(StrictModel):
     evaluation_id: str
@@ -136,13 +170,25 @@ class EvaluationResult(StrictModel):
     execution: ExecutionContext | None = None
     trace: TraceContext
 
+    _validate_text = field_validator("evaluation_id")(_nonempty)
+
 
 class ValidationReport(StrictModel):
     valid: bool
-    schema: str  # type: ignore[assignment]
+    schema_name: str = Field(alias="schema", serialization_alias="schema")
     schema_version: str
     errors: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+    @property
+    def schema(self) -> str:
+        return self.schema_name
 
 
 class BridgeEnvelope(StrictModel):
@@ -158,16 +204,11 @@ class BridgeEnvelope(StrictModel):
     execution: ExecutionContext | None = None
     artifact_refs: list[ArtifactRef] = Field(default_factory=list)
 
+    _validate_text = field_validator(
+        "message_id", "message_type", "producer", "consumer", "idempotency_key"
+    )(_nonempty)
+
     @field_validator("idempotency_key")
     @classmethod
-    def nonempty_key(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("idempotency_key must not be empty")
-        return value
-
-    @field_validator("message_type", "producer", "consumer")
-    @classmethod
-    def nonempty_identity(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("message identity fields must not be empty")
-        return value
+    def normalize_key(cls, value: str) -> str:
+        return value.strip()
