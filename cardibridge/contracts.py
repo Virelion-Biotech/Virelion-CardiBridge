@@ -165,12 +165,11 @@ class Prediction(StrictModel):
     model_version: str
 
     _validate_text = field_validator("target", "model_id", "model_version")(_nonempty)
-    _validate_probability = field_validator("probability")(_aware_optional) if False else None
 
     @field_validator("probability")
     @classmethod
     def validate_probability(cls, value: float | None) -> float | None:
-        return _aware_optional(value) if False else (None if value is None else _finite(value))
+        return None if value is None else _finite(value)
 
 
 class EvaluationRequest(StrictModel):
