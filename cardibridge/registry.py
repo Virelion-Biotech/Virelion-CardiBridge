@@ -3,13 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, TypeVar
+from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
 from .contracts import BridgeEnvelope, ValidationReport
 
-T = TypeVar("T", bound=BaseModel)
 _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 
@@ -59,14 +58,14 @@ class ContractRegistry:
         except ValidationError as exc:
             return ValidationReport(
                 valid=False,
-                schema=name,
+                schema_name=name,
                 schema_version=version,
                 errors=[
                     {"type": error["type"], "message": error["msg"], "loc": error["loc"]}
                     for error in exc.errors()
                 ],
             )
-        return ValidationReport(valid=True, schema=name, schema_version=version)
+        return ValidationReport(valid=True, schema_name=name, schema_version=version)
 
     def fingerprint(self, name: str) -> str:
         self.model(name)
