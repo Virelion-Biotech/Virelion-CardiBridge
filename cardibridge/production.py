@@ -16,6 +16,9 @@ Handler = Callable[[BridgeEnvelope], Any]
 class ProductionRouter:
     """Validated, durable, observable router for Agent/Vex/Eval pipelines."""
 
+    _FINAL_STATUSES = frozenset({"processed", "dead_letter"})
+    _CLAIMABLE_STATUSES = frozenset({"accepted", "handler_failed"})
+
     def __init__(
         self,
         registry: ContractRegistry,
@@ -37,13 +40,27 @@ class ProductionRouter:
         if not report.valid:
             self.metrics.observe("validation_failures")
             raise ValueError(report.model_dump_json())
-        if not self.store.append(envelope, status="accepted"):
+
+        existing = self.store.status_by_key(envelope.idempotency_key)
+        if existing in self._FINAL_STATUSES or existing == "processing":
             self.metrics.observe("duplicates")
             return {"status": "duplicate", "message_id": envelope.message_id}
+        if existing is None:
+            self.store.append(envelope, status="accepted")
+        elif existing not in self._CLAIMABLE_STATUSES:
+            self.metrics.observe("duplicates")
+            return {"status": "duplicate", "message_id": envelope.message_id}
+
+        if not self.store.claim(envelope.idempotency_key, self._CLAIMABLE_STATUSES):
+            self.metrics.observe("duplicates")
+            return {"status": "duplicate", "message_id": envelope.message_id}
+
         handler = self._handlers.get((envelope.message_type, envelope.consumer))
         if handler is None:
             self.store.mark(envelope.message_id, "dead_letter")
+            self.metrics.observe("delivery_failures")
             raise LookupError(f"no handler for {envelope.message_type!r} -> {envelope.consumer!r}")
+
         try:
             result = handler(envelope)
             self.store.mark(envelope.message_id, "processed")
@@ -62,10 +79,12 @@ class ProductionRouter:
             envelope.message_id,
             envelope.idempotency_key,
             topic_for(envelope),
-            "",
-            not accepted,
-            None,
+            envelope.timestamp.isoformat(),
+            duplicate=not accepted,
+            sequence=None,
         )
 
-    def replay(self, topic: str | None = None, after: int = 0) -> Iterable[tuple[int, BridgeEnvelope]]:
-        return self.store.replay(topic, after)
+    def replay(
+        self, topic: str | None = None, after: int = 0, limit: int | None = None
+    ) -> Iterable[tuple[int, BridgeEnvelope]]:
+        return self.store.replay(topic, after, limit)
