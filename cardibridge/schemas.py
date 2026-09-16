@@ -16,7 +16,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
 
 
 def export_json_schemas() -> dict[str, Any]:
-    return {name: SCHEMAS[name].model_json_schema() for name in sorted(SCHEMAS)}
+    return {name: model.model_json_schema() for name, model in sorted(SCHEMAS.items())}
 
 
 def export_asyncapi(registry: Any) -> dict[str, Any]:
