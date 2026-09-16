@@ -7,7 +7,6 @@ from typing import Any
 
 from .protocol import canonical_json
 
-
 PROTOCOL = "cardibridge"
 WIRE_VERSION = 1
 CONTENT_TYPE = "application/json"
@@ -58,7 +57,7 @@ def validate_frame(value: dict[str, Any], *, secret: bytes | None = None) -> Non
         raise ValueError("unsupported CardiBridge content type")
     payload = value.get("payload")
     if not isinstance(payload, dict):
-        raise ValueError("wire frame payload must be an object")
+        raise TypeError("wire frame payload must be an object")
     if value.get("content_digest") != digest(payload):
         raise ValueError("content digest mismatch")
     if secret is not None and not verify(payload, value.get("signature", ""), secret):
