@@ -97,7 +97,12 @@ def create_app(
             result = router.dispatch(envelope)
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-        return {"status": "processed", "message_id": envelope.message_id, "result": result}
+        status = result.get("status") if isinstance(result, dict) else None
+        return {
+            "status": status if status in {"processed", "duplicate"} else "processed",
+            "message_id": envelope.message_id,
+            "result": result,
+        }
 
     @app.get("/v1/replay")
     def replay(
