@@ -188,7 +188,7 @@ def test_batch_and_partition():
 
 
 def test_hypothesis_canonical():
-    hypothesis = pytest.importorskip("hypothesis")
+    pytest.importorskip("hypothesis")
     from hypothesis import given, settings
     from hypothesis import strategies as st
 
