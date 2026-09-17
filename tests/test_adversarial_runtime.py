@@ -22,8 +22,6 @@ from cardibridge.reliability import DeliveryAttempt
 from cardibridge.store import EventStore
 
 
-
-
 def _env(key: str = "runtime-test") -> BridgeEnvelope:
     trace = TraceContext(source="pytest-scrub")
     payload = AgentChallenge(
@@ -191,7 +189,8 @@ def test_batch_and_partition():
 
 def test_hypothesis_canonical():
     hypothesis = pytest.importorskip("hypothesis")
-    from hypothesis import given, settings, strategies as st
+    from hypothesis import given, settings
+    from hypothesis import strategies as st
 
     json_scalars = st.one_of(st.none(), st.booleans(), st.integers(-10**6, 10**6), st.text(max_size=20))
     json_values = st.recursive(
