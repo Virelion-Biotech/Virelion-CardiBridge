@@ -60,7 +60,28 @@ class EventStore:
             )"""
         )
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_lineage_run_time ON lineage_events(run_id, created_at)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS consumer_results (key TEXT PRIMARY KEY, payload TEXT NOT NULL)")
         self.db.commit()
+
+    def complete(self, key: str, result: Any) -> None:
+        """Atomically complete delivery and retain JSON consumer output for retries."""
+        try:
+            payload = json.dumps(result, allow_nan=False)
+        except (TypeError, ValueError):
+            payload = None  # Non-JSON handlers keep the legacy duplicate receipt.
+        with self._lock, self.db:
+            if payload is not None:
+                self.db.execute("INSERT OR REPLACE INTO consumer_results(key,payload) VALUES(?,?)", (key, payload))
+            self.db.execute("UPDATE events SET status='processed' WHERE key=?", (key,))
+
+    def duplicate_receipt(self, key: str) -> dict[str, Any]:
+        with self._lock:
+            event = self.db.execute("SELECT message_id FROM events WHERE key=?", (key,)).fetchone()
+            result = self.db.execute("SELECT payload FROM consumer_results WHERE key=?", (key,)).fetchone()
+        receipt = {"status": "duplicate", "message_id": event[0] if event else None}
+        if result:
+            receipt["result"] = json.loads(result[0])
+        return receipt
 
     def seen(self, key: str) -> bool:
         return self.status_by_key(key) is not None

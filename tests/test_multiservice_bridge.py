@@ -127,3 +127,15 @@ def test_challenge_observe_eval_pipeline():
     assert len(replayed) >= 3
     ids = {env.message_id for _, env in replayed}
     assert challenge.message_id in ids
+
+
+def test_consumer_result_survives_router_restart(tmp_path):
+    path = tmp_path / "events.sqlite"
+    envelope = BridgeEnvelope(message_type="agent.challenge", producer="agent", consumer="vex", idempotency_key="durable-result", payload=AgentChallenge(challenge_type="fixture", population=[{"cell": "cardiomyocyte"}], intended_task="test", trace=_trace()).model_dump(mode="json"), trace=_trace())
+    first = ProductionRouter(default_registry(), EventStore(path))
+    first.register("agent.challenge", "vex", lambda env: {"observed": 0.7})
+    assert first.dispatch(envelope) == {"observed": 0.7}
+    second = ProductionRouter(default_registry(), EventStore(path))
+    replay = second.dispatch(envelope)
+    assert replay["status"] == "duplicate"
+    assert replay["result"] == {"observed": 0.7}

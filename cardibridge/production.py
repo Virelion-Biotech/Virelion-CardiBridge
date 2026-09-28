@@ -54,13 +54,13 @@ class ProductionRouter:
             raise ValueError("idempotency_key is already associated with a different envelope")
         if existing in self._FINAL_STATUSES or existing == "processing":
             self.metrics.observe("duplicates")
-            return {"status": "duplicate", "message_id": envelope.message_id}
+            return self.store.duplicate_receipt(envelope.idempotency_key)
         if existing is None:
             self.store.append(envelope, status="accepted")
 
         if not self.store.claim(envelope.idempotency_key, self._CLAIMABLE_STATUSES):
             self.metrics.observe("duplicates")
-            return {"status": "duplicate", "message_id": envelope.message_id}
+            return self.store.duplicate_receipt(envelope.idempotency_key)
 
         handler = self._handlers.get((envelope.message_type, envelope.consumer))
         if handler is None:
@@ -70,7 +70,7 @@ class ProductionRouter:
 
         try:
             result = handler(envelope)
-            self.store.mark(envelope.message_id, "processed")
+            self.store.complete(envelope.idempotency_key, result)
             self.metrics.observe("published")
             return result
         except Exception:
