@@ -11,7 +11,9 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "agent.challenge": AgentChallenge,
     "eval.request": EvaluationRequest,
     "eval.result": EvaluationResult,
-    "vex.observation": VexObservation,\n    "benchmark.evidence": BenchmarkEvidence,\n    "benchmark.result": BenchmarkResultRecord,
+    "vex.observation": VexObservation,
+    "benchmark.evidence": BenchmarkEvidence,
+    "benchmark.result": BenchmarkResultRecord,
 }
 
 

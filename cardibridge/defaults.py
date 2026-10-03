@@ -6,7 +6,9 @@ from .registry import ContractRegistry
 AGENT_CHALLENGE = "agent.challenge"
 EVAL_REQUEST = "eval.request"
 EVAL_RESULT = "eval.result"
-VEX_OBSERVATION = "vex.observation"\nBENCHMARK_EVIDENCE = "benchmark.evidence"\nBENCHMARK_RESULT = "benchmark.result"
+VEX_OBSERVATION = "vex.observation"
+BENCHMARK_EVIDENCE = "benchmark.evidence"
+BENCHMARK_RESULT = "benchmark.result"
 
 
 def default_registry() -> ContractRegistry:
@@ -15,7 +17,9 @@ def default_registry() -> ContractRegistry:
     registry.register(AGENT_CHALLENGE, AgentChallenge)
     registry.register(EVAL_REQUEST, EvaluationRequest)
     registry.register(EVAL_RESULT, EvaluationResult)
-    registry.register(VEX_OBSERVATION, VexObservation)\n    registry.register(BENCHMARK_EVIDENCE, BenchmarkEvidence)\n    registry.register(BENCHMARK_RESULT, BenchmarkResultRecord)
+    registry.register(VEX_OBSERVATION, VexObservation)
+    registry.register(BENCHMARK_EVIDENCE, BenchmarkEvidence)
+    registry.register(BENCHMARK_RESULT, BenchmarkResultRecord)
     return registry
 
 

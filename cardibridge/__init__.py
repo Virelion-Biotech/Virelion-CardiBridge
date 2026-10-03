@@ -33,7 +33,11 @@ from .transport import (
 __version__ = "0.3.0"
 
 __all__ = [
-    "AGENT_CHALLENGE",\n    "BENCHMARK_EVIDENCE",\n    "BENCHMARK_RESULT",\n    "BenchmarkEvidence",\n    "BenchmarkResultRecord",
+    "AGENT_CHALLENGE",
+    "BENCHMARK_EVIDENCE",
+    "BENCHMARK_RESULT",
+    "BenchmarkEvidence",
+    "BenchmarkResultRecord",
     "EVAL_REQUEST",
     "EVAL_RESULT",
     "PROTOCOL_NAME",
