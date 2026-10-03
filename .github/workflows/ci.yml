@@ -8,14 +8,45 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         python: ['3.10', '3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e '.[dev]'
+      - run: pip install -e '.[dev,server]' hypothesis
+      - run: pip check
       - run: ruff check cardibridge tests
-      - run: pytest --cov=cardibridge --cov-report=term-missing
+      - run: mypy cardibridge
+      - run: pytest --cov=cardibridge --cov-report=term-missing --cov-fail-under=60
+      - run: python -m build
+      - run: python -m pip install dist/*.whl --force-reinstall
+      - run: python -c "import cardibridge; assert cardibridge.__version__ == '0.3.0'; print(cardibridge.__version__)"
+
+  adversarial-scrub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[dev,server]' hypothesis
+      - name: Adversarial runtime + multi-service scrub
+        run: |
+          pytest -q tests/test_adversarial_runtime.py tests/test_multiservice_bridge.py
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[dev,server]'
+      - run: pip install pip-audit
+      - run: pip-audit

@@ -1,3 +1,6 @@
+import binascii
+import math
+
 import pytest
 
 from cardibridge import (
@@ -11,6 +14,7 @@ from cardibridge import (
 )
 from cardibridge.builtin import default_registry
 from cardibridge.conformance import ConformanceCase, run_conformance
+from cardibridge.contracts import EvaluationResult, Prediction
 from cardibridge.health import health
 
 
@@ -34,12 +38,19 @@ def make_envelope() -> BridgeEnvelope:
 
 def test_envelope_codec_round_trip() -> None:
     envelope = make_envelope()
-    assert EnvelopeCodec.decode(EnvelopeCodec.encode(envelope)) == envelope
+    encoded = EnvelopeCodec.encode(envelope)
+    assert isinstance(encoded, bytes)
+    assert EnvelopeCodec.decode(encoded) == envelope
     assert EnvelopeCodec.decode_base64(EnvelopeCodec.encode_base64(envelope)) == envelope
 
 
+def test_codec_rejects_non_finite_json_constants() -> None:
+    with pytest.raises(ValueError, match="non-finite"):
+        EnvelopeCodec.decode('{"value":NaN}')
+
+
 def test_retry_policy_is_bounded() -> None:
-    policy = RetryPolicy(max_attempts=5, base_delay_seconds=2, max_delay_seconds=5)
+    policy = RetryPolicy(max_attempts=5, base_delay_seconds=2, max_delay_seconds=5, jitter=0)
     assert policy.delay(1) == 2
     assert policy.delay(3) == 5
 
@@ -56,7 +67,10 @@ def test_dlq_lifecycle() -> None:
 
 def test_conformance_and_health() -> None:
     registry = default_registry()
-    result = run_conformance(registry, [ConformanceCase("valid-agent", "agent.challenge", make_envelope().payload)])
+    result = run_conformance(
+        registry,
+        [ConformanceCase("valid-agent", "agent.challenge", make_envelope().payload)],
+    )
     assert result.passed
     snapshot = health(registry)
     assert snapshot.status == "ok"
@@ -64,5 +78,22 @@ def test_conformance_and_health() -> None:
 
 
 def test_invalid_base64_rejected() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(binascii.Error):
         EnvelopeCodec.decode_base64("not-valid-base64")
+
+
+def test_predictions_and_metrics_reject_non_finite_values() -> None:
+    with pytest.raises(ValueError):
+        Prediction(
+            target="target",
+            value=1,
+            probability=math.nan,
+            model_id="model",
+            model_version="1.0.0",
+        )
+    with pytest.raises(ValueError):
+        EvaluationResult(
+            evaluation_id="eval",
+            metrics={"auroc": math.inf},
+            trace=TraceContext(source="test"),
+        )

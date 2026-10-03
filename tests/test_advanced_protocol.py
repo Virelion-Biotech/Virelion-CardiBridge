@@ -1,13 +1,24 @@
 from cardibridge import (
-    BridgeEnvelope, CircuitBreaker, ContractCapability, ContractNegotiator,
-    ProvenanceChain, TraceContext, validate_batch,
+    BridgeEnvelope,
+    CircuitBreaker,
+    ContractCapability,
+    ContractNegotiator,
+    ProvenanceChain,
+    TraceContext,
+    validate_batch,
 )
 
 
 def envelope(message_id: str) -> BridgeEnvelope:
-    return BridgeEnvelope(message_id=message_id, message_type="agent.challenge", producer="agent",
-                          consumer="vex", idempotency_key=message_id, payload={"x": 1},
-                          trace=TraceContext(source="agent"))
+    return BridgeEnvelope(
+        message_id=message_id,
+        message_type="agent.challenge",
+        producer="agent",
+        consumer="vex",
+        idempotency_key=message_id,
+        payload={"x": 1},
+        trace=TraceContext(source="agent"),
+    )
 
 
 def test_provenance_chain_is_tamper_evident() -> None:

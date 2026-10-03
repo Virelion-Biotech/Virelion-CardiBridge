@@ -1,63 +1,101 @@
-# CardiBridge Protocol
+# Virelion-CardiBridge
 
-CardiBridge is Virelion's **interoperability and protocol layer**. It is the typed, versioned, validated boundary between CardiAgent, CardiVex, CardiEval, CardiTrace and future Virelion services.
+CardiBridge is the contract-first interoperability layer for the Virelion computational cardiac stack. It standardizes typed messages, schema evolution, provenance, artifact references, execution context, routing, delivery semantics, and transport adapters without embedding cardiac algorithms or a specific broker.
+
+## What it contains
+
+- Strict Pydantic message contracts with semantic versions.
+- Artifact references, workflow/task execution context, trace context, and lineage facets.
+- Runtime contract registry with validation and SHA-256 schema fingerprints.
+- Machine-readable contract catalog and AsyncAPI 3-compatible export.
+- Explicit compatibility negotiation and deterministic migrations.
+- Canonical JSON encoding, content identity, HMAC signing, and authorization primitives.
+- SQLite inbox/outbox/audit persistence with replay and delivery-attempt history.
+- Mandatory idempotency and at-least-once delivery semantics.
+- Bounded exponential retries with deterministic jitter and dead-letter handling.
+- In-memory, HTTP, callback, NATS-client, and Kafka-client transport adapters.
+- Circuit breaker, health/readiness, batching, conformance, and observability primitives.
+- Optional FastAPI gateway that exposes contract, validation, catalog, and routing endpoints.
+
+CardiBridge deliberately does **not** implement domain-specific cardiac algorithms or act as a workflow engine. Workflow orchestration belongs in a higher layer and can propagate its identity through `ExecutionContext`.
 
 ## Architecture
 
 ```text
-CardiAgent ── agent.challenge ──┐
-                                │
-CardiVex   ── vex.observation ──┼──> CardiBridge ──> routing / validation / persistence / provenance
-                                │
-CardiEval  ── eval.request ─────┘                         │
-                                                         ▼
-                                                   eval.result
+CardiAgent / CardiVex / CardiEval / CardiLearn / HeartTwin
+                         |
+                         v
+                  +--------------+
+                  | CardiBridge   |
+                  |--------------|
+                  | Contracts     |
+                  | Validation    |
+                  | Compatibility |
+                  | Routing       |
+                  | Idempotency   |
+                  | Provenance    |
+                  | Delivery      |
+                  +------+-------+
+                         |
+          +--------------+--------------+
+          |              |              |
+         HTTP           NATS          Kafka
+          |              |              |
+          +--------------+--------------+
+                         |
+                    external infra
 ```
 
-## Production capabilities
+## Installation
 
-- Typed Pydantic contracts with strict fields.
-- Versioned contract registry and deterministic schema fingerprints.
-- Explicit migration/compatibility gates; no silent scientific payload coercion.
-- Canonical JSON and SHA-256 content addressing.
-- HMAC signing primitives and principal/scope authorization primitives.
-- Durable SQLite inbox/outbox/audit event log with WAL, idempotency and replay.
-- Deterministic in-process router plus a production router with persistence and metrics.
-- Async transport abstraction and reference in-memory transport.
-- Durable persist-before-publish adapter for external brokers.
-- Conformance test primitives for Agent/Vex/Eval contract compatibility.
-- Machine-readable contract catalog export suitable for API/schema registries.
-- Observable delivery, duplicate, validation, failure and latency metrics.
+For development:
 
-## Protocol invariants
+```bash
+pip install -e '.[dev]'
+```
 
-1. **Validate before dispatch.** Unknown or malformed contracts never reach a consumer.
-2. **Persist before external publish.** The durable adapter implements an application-level outbox boundary.
-3. **Idempotency is mandatory.** Every envelope carries an idempotency key.
-4. **Schema evolution is explicit.** Version changes require a registered migration.
-5. **Provenance travels with the message.** Trace IDs, parent spans, source and provenance metadata remain part of the contract.
-6. **Canonical bytes are reproducible.** Hashing/signing uses deterministic JSON serialization.
-7. **Transport is replaceable.** Kafka, NATS, HTTP or another broker can implement the transport protocol without changing scientific contracts.
+For the optional HTTP gateway:
 
-## Quick start
+```bash
+pip install -e '.[server]'
+```
+
+## Contract validation
+
+```bash
+cardibridge schema agent.challenge
+cardibridge asyncapi --output asyncapi.json
+cardibridge validate agent.challenge '{"challenge_type":"mi","population":[{"sample":"S1"}],"intended_task":"classify","trace":{"source":"CardiAgent"}}'
+```
+
+## Durable delivery
 
 ```python
-from cardibridge.builtin import default_registry
-from cardibridge.production import ProductionRouter
+from cardibridge import DurableTransportAdapter, EventStore, InMemoryTransport, RetryPolicy
 
-registry = default_registry()
-router = ProductionRouter(registry)
-
-router.register("agent.challenge", "CardiVex", lambda envelope: {"accepted": True})
+store = EventStore("cardibridge.db")
+transport = DurableTransportAdapter(
+    store,
+    InMemoryTransport(),
+    RetryPolicy(max_attempts=5),
+)
+receipt = await transport.publish(envelope)
 ```
 
-## Contract families
+The durable adapter persists before external publication, records every attempt, and moves exhausted deliveries to its dead-letter queue. Consumers should remain idempotent because the protocol is intentionally at-least-once.
 
-| Contract | Producer | Consumer | Purpose |
-|---|---|---|---|
-| `agent.challenge` | CardiAgent | CardiVex | Challenge population and task definition |
-| `vex.observation` | CardiVex | downstream/evaluation | Structured observations and evidence |
-| `eval.request` | model/service | CardiEval | Evaluation request and predictions |
-| `eval.result` | CardiEval | downstream | Metrics, uncertainty and reproducibility |
+## Interoperability
 
-CardiBridge deliberately does **not** own domain-specific algorithms. Its job is to make those algorithms composable, auditable, replayable and version-safe.
+The core contract model is independent of FastAPI, Kafka, NATS, RabbitMQ, Kubernetes, or cloud SDKs. Adapters translate between a selected transport and the same `BridgeEnvelope`. This keeps scientific contracts stable while infrastructure can evolve independently.
+
+## Provenance
+
+Use `ArtifactRef` for datasets, models, feature tables, simulation outputs, and other potentially large artifacts. Use `ExecutionContext` for workflow/task identity and `LineageEvent` for run/job/input/output relationships. `ProvenanceChain` provides tamper-evident commitments and `EventStore` provides local persistence and replay.
+
+## Validation and limitations
+
+CI runs Ruff, mypy, pytest, package builds, dependency consistency checks, and vulnerability auditing across supported Python versions. Protocol conformance does not establish scientific correctness. Scientific validity, model performance, data quality, and domain-specific safety remain the responsibility of the consuming service.
+
+## License
+
+GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later). See `LICENSE`.
