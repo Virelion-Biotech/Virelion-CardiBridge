@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from .contracts import AgentChallenge, BenchmarkEvidence, BenchmarkResultRecord, EvaluationRequest, EvaluationResult, VexObservation
+from .contracts import (
+    AgentChallenge,
+    BenchmarkEvidence,
+    BenchmarkResultRecord,
+    EvaluationRequest,
+    EvaluationResult,
+    VexObservation,
+)
 from .registry import ContractRegistry
 
 AGENT_CHALLENGE = "agent.challenge"
@@ -23,4 +30,4 @@ def default_registry() -> ContractRegistry:
     return registry
 
 
-__all__ = ["AGENT_CHALLENGE", "EVAL_REQUEST", "EVAL_RESULT", "VEX_OBSERVATION", "BENCHMARK_EVIDENCE", "BENCHMARK_RESULT", "default_registry"]
+__all__ = ["AGENT_CHALLENGE", "BENCHMARK_EVIDENCE", "BENCHMARK_RESULT", "EVAL_REQUEST", "EVAL_RESULT", "VEX_OBSERVATION", "default_registry"]
