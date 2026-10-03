@@ -39,6 +39,7 @@ def test_benchmark_result_contract():
         "metrics": {"auroc": 0.9},
         "sample_count": 10,
         "protocol_id": "cardieval-task",
+        "source": "CardiEval/0.4",
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "trace": _trace(),
     }
