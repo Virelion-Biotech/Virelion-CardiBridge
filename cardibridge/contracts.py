@@ -229,6 +229,38 @@ class BenchmarkEvidence(StrictModel):
     _validate_observed_at = field_validator("observed_at")(_aware)
 
 
+class BenchmarkAdmissionAssessment(StrictModel):
+    """Portable fail-closed CardiBench admission assessment."""
+
+    assessment_id: str = Field(default_factory=lambda: uuid4().hex)
+    benchmark_id: str
+    benchmark_version: str
+    policy: str
+    status: Literal["blocked", "ready_for_review"]
+    ready_for_review: bool
+    blockers: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    required_fields: list[str] = Field(default_factory=list)
+    missing_by_field: dict[str, list[str]] = Field(default_factory=dict)
+    statistics: dict[str, Any] = Field(default_factory=dict)
+    materialization_preview: dict[str, Any] | None = None
+    trace: TraceContext
+
+    _validate_text = field_validator(
+        "assessment_id", "benchmark_id", "benchmark_version", "policy"
+    )(_nonempty)
+
+    @model_validator(mode="after")
+    def validate_status(self) -> "BenchmarkAdmissionAssessment":
+        if self.ready_for_review != (self.status == "ready_for_review"):
+            raise ValueError("status and ready_for_review disagree")
+        if self.ready_for_review and self.blockers:
+            raise ValueError("ready_for_review assessment must not contain blockers")
+        if not self.ready_for_review and not self.blockers:
+            raise ValueError("blocked assessment must contain at least one blocker")
+        return self
+
+
 class BenchmarkResultRecord(StrictModel):
     """Comparable-within-protocol benchmark result observation."""
 

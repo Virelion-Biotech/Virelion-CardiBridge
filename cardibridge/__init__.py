@@ -9,6 +9,7 @@ from .contracts import *
 from .deadletter import DeadLetter, DeadLetterQueue
 from .defaults import (
     AGENT_CHALLENGE,
+    BENCHMARK_ADMISSION,
     BENCHMARK_EVIDENCE,
     BENCHMARK_RESULT,
     EVAL_REQUEST,
@@ -42,6 +43,7 @@ __version__ = "0.3.0"
 
 __all__ = [
     "AGENT_CHALLENGE",
+    "BENCHMARK_ADMISSION",
     "BENCHMARK_EVIDENCE",
     "BENCHMARK_RESULT",
     "EVAL_REQUEST",
@@ -53,6 +55,7 @@ __all__ = [
     "ArtifactRef",
     "Authorizer",
     "BatchResult",
+    "BenchmarkAdmissionAssessment",
     "BenchmarkEvidence",
     "BenchmarkResultRecord",
     "BridgeEnvelope",

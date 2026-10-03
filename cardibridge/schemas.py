@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from .catalog import export_asyncapi as _export_asyncapi
 from .contracts import (
     AgentChallenge,
+    BenchmarkAdmissionAssessment,
     BenchmarkEvidence,
     BenchmarkResultRecord,
     EvaluationRequest,
@@ -19,6 +20,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "eval.request": EvaluationRequest,
     "eval.result": EvaluationResult,
     "vex.observation": VexObservation,
+    "benchmark.admission": BenchmarkAdmissionAssessment,
     "benchmark.evidence": BenchmarkEvidence,
     "benchmark.result": BenchmarkResultRecord,
 }
