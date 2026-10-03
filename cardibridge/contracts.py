@@ -251,7 +251,7 @@ class BenchmarkAdmissionAssessment(StrictModel):
     )(_nonempty)
 
     @model_validator(mode="after")
-    def validate_status(self) -> "BenchmarkAdmissionAssessment":
+    def validate_status(self) -> BenchmarkAdmissionAssessment:
         if self.ready_for_review != (self.status == "ready_for_review"):
             raise ValueError("status and ready_for_review disagree")
         if self.ready_for_review and self.blockers:
