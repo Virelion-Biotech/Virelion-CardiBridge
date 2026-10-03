@@ -1,8 +1,8 @@
 from cardibridge import (
     AgentChallenge,
+    BenchmarkResultRecord,
     EvaluationRequest,
     EvaluationResult,
-    BenchmarkResultRecord,
     ProductionRouter,
     TraceContext,
     VexObservation,
