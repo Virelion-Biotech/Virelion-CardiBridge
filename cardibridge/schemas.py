@@ -5,13 +5,13 @@ from typing import Any
 from pydantic import BaseModel
 
 from .catalog import export_asyncapi as _export_asyncapi
-from .contracts import AgentChallenge, EvaluationRequest, EvaluationResult, VexObservation
+from .contracts import AgentChallenge, BenchmarkEvidence, BenchmarkResultRecord, EvaluationRequest, EvaluationResult, VexObservation
 
 SCHEMAS: dict[str, type[BaseModel]] = {
     "agent.challenge": AgentChallenge,
     "eval.request": EvaluationRequest,
     "eval.result": EvaluationResult,
-    "vex.observation": VexObservation,
+    "vex.observation": VexObservation,\n    "benchmark.evidence": BenchmarkEvidence,\n    "benchmark.result": BenchmarkResultRecord,
 }
 
 

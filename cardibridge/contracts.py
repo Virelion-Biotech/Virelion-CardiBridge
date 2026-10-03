@@ -209,6 +209,60 @@ class EvaluationResult(StrictModel):
         return value
 
 
+
+class BenchmarkEvidence(StrictModel):
+    """Portable discovery evidence emitted by CardiBench."""
+
+    observation_id: str
+    kind: Literal["dataset", "publication", "repository", "benchmark", "model", "other"]
+    source: str
+    source_record_id: str
+    title: str
+    uri: str | None = None
+    identifiers: dict[str, str] = Field(default_factory=dict)
+    evidence_state: Literal["observed", "verified", "unknown", "not_applicable", "unverified"] = "observed"
+    observed_at: datetime
+    published_at: str | None = None
+    trace: TraceContext
+
+    _validate_text = field_validator("observation_id", "source", "source_record_id", "title")(_nonempty)
+    _validate_observed_at = field_validator("observed_at")(_aware)
+
+
+class BenchmarkResultRecord(StrictModel):
+    """Comparable-within-protocol benchmark result observation."""
+
+    result_id: str
+    benchmark_id: str
+    benchmark_version: str
+    benchmark_provenance_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_id: str
+    model_version: str
+    split: Literal["validation", "test", "external"]
+    metrics: dict[str, float]
+    sample_count: int = Field(ge=1)
+    protocol_id: str
+    recorded_at: datetime
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
+    trace: TraceContext
+
+    _validate_text = field_validator(
+        "result_id", "benchmark_id", "benchmark_version", "model_id", "model_version", "protocol_id"
+    )(_nonempty)
+    _validate_recorded_at = field_validator("recorded_at")(_aware)
+
+    @field_validator("metrics")
+    @classmethod
+    def validate_benchmark_metrics(cls, value: dict[str, float]) -> dict[str, float]:
+        if not value:
+            raise ValueError("at least one metric is required")
+        for name, metric in value.items():
+            if not name.strip():
+                raise ValueError("metric names must not be empty")
+            _finite(metric)
+        return value
+
+
 class ValidationReport(StrictModel):
     valid: bool
     schema_name: str = Field(alias="schema", serialization_alias="schema")

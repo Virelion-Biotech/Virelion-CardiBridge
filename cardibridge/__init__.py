@@ -7,7 +7,7 @@ from .codec import EnvelopeCodec
 from .compatibility import CompatibilityManager, CompatibilityResult
 from .contracts import *
 from .deadletter import DeadLetter, DeadLetterQueue
-from .defaults import AGENT_CHALLENGE, EVAL_REQUEST, EVAL_RESULT, VEX_OBSERVATION, default_registry
+from .defaults import AGENT_CHALLENGE, BENCHMARK_EVIDENCE, BENCHMARK_RESULT, EVAL_REQUEST, EVAL_RESULT, VEX_OBSERVATION, default_registry
 from .gateway import create_app
 from .health import DependencyHealth, HealthSnapshot, Readiness, health
 from .negotiation import ContractCapability, ContractNegotiator, NegotiatedContract
@@ -33,7 +33,7 @@ from .transport import (
 __version__ = "0.3.0"
 
 __all__ = [
-    "AGENT_CHALLENGE",
+    "AGENT_CHALLENGE",\n    "BENCHMARK_EVIDENCE",\n    "BENCHMARK_RESULT",\n    "BenchmarkEvidence",\n    "BenchmarkResultRecord",
     "EVAL_REQUEST",
     "EVAL_RESULT",
     "PROTOCOL_NAME",
