@@ -2,6 +2,7 @@ from cardibridge import (
     AgentChallenge,
     EvaluationRequest,
     EvaluationResult,
+    BenchmarkResultRecord,
     ProductionRouter,
     TraceContext,
     VexObservation,
@@ -80,3 +81,24 @@ def test_result_contract_is_registered_and_valid():
     )
     report = registry.validate(EVAL_RESULT, result.model_dump())
     assert report.valid
+
+
+def test_cardibench_result_contract_preserves_evaluator_source():
+    result = BenchmarkResultRecord(
+        result_id="result-001",
+        benchmark_id="mi-vs-reference",
+        benchmark_version="1.0",
+        benchmark_provenance_sha256="a" * 64,
+        model_id="model-1",
+        model_version="1.0",
+        split="test",
+        metrics={"auroc": 0.91},
+        sample_count=20,
+        protocol_id="binary-cardiac-state-detection",
+        source="CardiEval/0.4",
+        recorded_at=TraceContext(source="test").created_at,
+        trace=TraceContext(source="CardiBench"),
+    )
+    report = default_registry().validate("benchmark.result", result.model_dump(mode="json"))
+    assert report.valid
+    assert result.source == "CardiEval/0.4"

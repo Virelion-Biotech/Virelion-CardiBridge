@@ -242,12 +242,13 @@ class BenchmarkResultRecord(StrictModel):
     metrics: dict[str, float]
     sample_count: int = Field(ge=1)
     protocol_id: str
+    source: str
     recorded_at: datetime
     artifacts: list[ArtifactRef] = Field(default_factory=list)
     trace: TraceContext
 
     _validate_text = field_validator(
-        "result_id", "benchmark_id", "benchmark_version", "model_id", "model_version", "protocol_id"
+        "result_id", "benchmark_id", "benchmark_version", "model_id", "model_version", "protocol_id", "source"
     )(_nonempty)
     _validate_recorded_at = field_validator("recorded_at")(_aware)
 
