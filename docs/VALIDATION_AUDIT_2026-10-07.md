@@ -4,7 +4,7 @@
 
 Version 0.3.1 repairs reproduced protocol, persistence, delivery, and gateway defects. CardiBridge is an interoperability library; it contains no cardiac solver, training pipeline, or clinical prediction algorithm. CPU cloud execution can validate its software contracts and delivery behavior. It cannot establish the scientific validity of results supplied by other HeartTwin services or certify a perfect product.
 
-Baseline: main `d17d30b057e7744cbd6fe23afb805db081e66f40`, version 0.3.0. The 51 original tests, Ruff, and strict mypy passed. Sixteen new regression cases failed against that implementation before repairs. The final local suite has 97 passing tests, including 46 additions; measured statement coverage is 87.15% (CI requires at least 80%).
+Baseline: main `d17d30b057e7744cbd6fe23afb805db081e66f40`, version 0.3.0. The 51 original tests, Ruff, and strict mypy passed. Sixteen new regression cases failed against that implementation before repairs. The final local suite has 103 passing tests, including 52 additions; measured statement coverage is 87.44% (CI requires at least 80%).
 
 ## Reproduced defects and repairs
 
@@ -18,9 +18,10 @@ Baseline: main `d17d30b057e7744cbd6fe23afb805db081e66f40`, version 0.3.0. The 51
 | Persisted retry schedules were ignored on resume | Re-read attempt history after acquiring ownership, honor stored deadlines, preserve attempt numbering, and recover expired outbox claims |
 | Stored payload and lineage digests were never checked | Verify digest on get, replay, outbox and lineage reads; consumer result digests added; corruption fails closed |
 | Duplicate lineage IDs masked changed event contents | Permit identical duplicates, reject identity/content conflicts |
-| Shallow migration copies changed source payloads | Deep-copy migration inputs and same-version results; validate versions and registered destination schema |
+| Shallow migration copies changed source payloads | Deep-copy migration inputs and same-version results; validate versions and registered destination schema; a registered transform alone does not imply target-schema support |
 | Unsupported envelope versions could be dispatched | Validate detached envelopes and exact registered versions before routing and encoding |
 | NaN retry settings and large exponents bypassed bounds or overflowed | Finite configuration validation and saturating exponential arithmetic, including subnormal delay inputs |
+| Nested numeric/string keys collapsed during Pydantic serialization | Validate model keys in Python form before encoding, hashing, signing, storing or routing; five boundary regressions |
 | Ambiguous or non-finite JSON and non-ASCII signatures caused inconsistent behavior | Reject duplicate keys, non-finite values and ambiguous canonical inputs; verification returns false on malformed signatures |
 | An explicitly supplied empty DLQ was discarded | Preserve the caller's instance; recover terminal records from SQLite after restart |
 | Gateway leaked replay under configured authentication and mishandled errors | Protect replay, normalize validation failures, reject unknown contracts and conflicting identities with stable HTTP errors |
@@ -33,7 +34,7 @@ Baseline: main `d17d30b057e7744cbd6fe23afb805db081e66f40`, version 0.3.0. The 51
 
 - `python -m ruff check cardibridge tests ci`: pass.
 - `python -m mypy cardibridge`: pass for all 31 source modules.
-- `python -m pytest --cov=cardibridge --cov-report=term --cov-fail-under=80`: 97 tests pass, 87.15% statement coverage.
+- `python -m pytest --cov=cardibridge --cov-report=term --cov-fail-under=80`: 103 tests pass, 87.44% statement coverage.
 - `python -m build`: sdist and wheel build successfully; SPDX license metadata retained.
 - `python ci/validate_wheel.py`: clean virtual environment, imports outside source checkout, codec round trip, SQLite restart, durable publication, FastAPI gateway, CLI and dependency consistency pass.
 - Official `@asyncapi/parser` 3.6.3: document accepted, zero errors and warnings. Pydantic-derived envelope schemas also validate actual envelope JSON through JSON Schema and reject invalid payloads.

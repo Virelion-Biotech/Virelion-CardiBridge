@@ -14,7 +14,7 @@ from urllib.request import Request, urlopen
 
 from .contracts import BridgeEnvelope
 from .deadletter import DeadLetterQueue
-from .protocol import DeliveryError, DeliveryReceipt, content_hash, topic_for
+from .protocol import DeliveryError, DeliveryReceipt, content_hash, model_json, topic_for
 from .reliability import RetryPolicy
 from .store import EventStore
 
@@ -45,7 +45,7 @@ class InMemoryTransport:
         self._publishing: dict[str, asyncio.Task[Any]] = {}
 
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
-        envelope = BridgeEnvelope.model_validate(envelope.model_dump(mode="json"))
+        envelope = BridgeEnvelope.model_validate(model_json(envelope))
         key = envelope.idempotency_key
         identity = content_hash(envelope.model_dump(mode="json"))
         pending = self._publishing.get(key)

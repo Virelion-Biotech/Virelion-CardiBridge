@@ -47,7 +47,14 @@ class CompatibilityManager:
         if source == target:
             return CompatibilityResult(target == self.registry.version(contract), source, target)
         if (contract, source, target) in self._migrations:
-            return CompatibilityResult(True, source, target, migrated=True)
+            supported = target == self.registry.version(contract)
+            return CompatibilityResult(
+                supported,
+                source,
+                target,
+                migrated=True,
+                warnings=() if supported else ("target schema is not registered",),
+            )
         return CompatibilityResult(False, source, target, warnings=("no registered migration",))
 
     def migrate(

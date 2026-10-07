@@ -221,3 +221,39 @@ def test_router_rejects_unnegotiated_schema_version():
     with pytest.raises(ValueError):
         router.dispatch(item)
     router.store.close()
+
+
+@pytest.mark.parametrize("boundary", ["codec", "store", "signature", "registry", "memory"])
+def test_nested_key_coercion_cannot_lose_scientific_payload(boundary):
+    item = message()
+    item.payload["population"][0]["nested"] = {1: "first", "1": "second"}
+    if boundary == "codec":
+        with pytest.raises(ValueError):
+            EnvelopeCodec.encode(item)
+    elif boundary == "store":
+        store = EventStore()
+        with pytest.raises(ValueError):
+            store.append(item)
+        assert not store.list_events()
+        store.close()
+    elif boundary == "signature":
+        from cardibridge.security import sign_envelope
+
+        with pytest.raises(ValueError):
+            sign_envelope(item, b"secret")
+    elif boundary == "registry":
+        assert not default_registry().validate(item.message_type, item.payload).valid
+    else:
+        with pytest.raises(ValueError):
+            asyncio.run(InMemoryTransport().publish(item))
+
+
+def test_registered_migration_does_not_imply_target_schema_support():
+    from cardibridge.protocol import ContractMismatch
+
+    manager = CompatibilityManager(default_registry())
+    manager.register_migration("agent.challenge", "1.0.0", "2.0.0", lambda data: data)
+    result = manager.check("agent.challenge", "1.0.0", "2.0.0")
+    assert result.migrated and not result.compatible
+    with pytest.raises(ContractMismatch):
+        manager.migrate("agent.challenge", message().payload, "1.0.0", "2.0.0")

@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from .contracts import BridgeEnvelope
-from .protocol import canonical_json
+from .protocol import canonical_json, model_json
 
 
 def _reject_constant(value: str) -> object:
@@ -26,7 +26,7 @@ class EnvelopeCodec:
 
     @staticmethod
     def encode(envelope: BridgeEnvelope) -> bytes:
-        return canonical_json(envelope.model_dump(mode="json"))
+        return canonical_json(model_json(envelope))
 
     @staticmethod
     def decode(data: bytes | str) -> BridgeEnvelope:

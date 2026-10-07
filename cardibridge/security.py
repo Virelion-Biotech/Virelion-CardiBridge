@@ -4,12 +4,12 @@ import hashlib
 import hmac
 
 from .contracts import BridgeEnvelope
-from .protocol import canonical_json
+from .protocol import canonical_json, model_json
 
 
 def canonical_envelope(envelope: BridgeEnvelope) -> bytes:
     """Return the same canonical representation used by protocol digests."""
-    return canonical_json(envelope.model_dump(mode="json", exclude={"signature"}))
+    return canonical_json(model_json(envelope, exclude={"signature"}))
 
 
 def sign_envelope(envelope: BridgeEnvelope, secret: bytes) -> str:

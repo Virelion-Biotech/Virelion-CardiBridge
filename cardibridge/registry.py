@@ -54,9 +54,9 @@ class ContractRegistry:
         model = self.model(name)
         version = self._versions[name]
         try:
-            from .protocol import canonical_json
+            from .protocol import canonical_json, model_json
 
-            canonical_json(model.model_validate(payload).model_dump(mode="json"))
+            canonical_json(model_json(model.model_validate(payload)))
         except (TypeError, ValueError) as exc:
             if not isinstance(exc, ValidationError):
                 return ValidationReport(
@@ -78,9 +78,9 @@ class ContractRegistry:
 
     def validate_envelope(self, envelope: BridgeEnvelope) -> BridgeEnvelope:
         """Validate a detached snapshot against the negotiated contract version."""
-        from .protocol import canonical_json
+        from .protocol import canonical_json, model_json
 
-        raw = envelope.model_dump(mode="json")
+        raw = model_json(envelope)
         canonical_json(raw)
         snapshot = BridgeEnvelope.model_validate(raw)
         if snapshot.trace.schema_version != self.version(snapshot.message_type):

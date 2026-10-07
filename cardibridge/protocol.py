@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import BaseModel
+
 from .contracts import BridgeEnvelope
 
 PROTOCOL_NAME = "Virelion CardiBridge Protocol"
@@ -38,12 +40,29 @@ def canonical_json(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+def model_json(model: BaseModel, *, exclude: set[str] | None = None) -> dict[str, Any]:
+    """Reject key coercion before Pydantic's JSON serialization can lose data."""
+
+    def check_keys(value: Any) -> None:
+        if isinstance(value, dict):
+            if any(not isinstance(key, str) for key in value):
+                raise ValueError("JSON object keys must be strings before serialization")
+            for child in value.values():
+                check_keys(child)
+        elif isinstance(value, (list, tuple)):
+            for child in value:
+                check_keys(child)
+
+    check_keys(model.model_dump(mode="python", exclude=exclude))
+    return model.model_dump(mode="json", exclude=exclude)
+
+
 def content_hash(value: Any) -> str:
     return "sha256:" + hashlib.sha256(canonical_json(value)).hexdigest()
 
 
 def envelope_digest(envelope: BridgeEnvelope) -> str:
-    return content_hash(envelope.model_dump(mode="json", exclude={"signature"}))
+    return content_hash(model_json(envelope, exclude={"signature"}))
 
 
 def topic_for(envelope: BridgeEnvelope) -> str:

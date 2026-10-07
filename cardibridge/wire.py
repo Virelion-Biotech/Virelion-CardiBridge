@@ -6,7 +6,7 @@ import hashlib
 import hmac
 from typing import Any
 
-from .protocol import canonical_json
+from .protocol import canonical_json, model_json
 
 PROTOCOL = "cardibridge"
 WIRE_VERSION = 1
@@ -40,7 +40,7 @@ def verify(value: Any, signature: str, secret: bytes) -> bool:
 def frame(
     envelope: Any, *, key_id: str | None = None, secret: bytes | None = None
 ) -> dict[str, Any]:
-    payload = envelope.model_dump(mode="json") if hasattr(envelope, "model_dump") else envelope
+    payload = model_json(envelope) if hasattr(envelope, "model_dump") else envelope
     result: dict[str, Any] = {
         "protocol": PROTOCOL,
         "wire_version": WIRE_VERSION,

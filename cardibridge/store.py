@@ -13,7 +13,7 @@ from typing import Any
 
 from .contracts import BridgeEnvelope, LineageEvent
 from .deadletter import DeadLetter
-from .protocol import content_hash, topic_for
+from .protocol import content_hash, model_json, topic_for
 from .reliability import DeliveryAttempt
 
 
@@ -143,7 +143,7 @@ class EventStore:
             return row[0] if row else None
 
     def append(self, envelope: BridgeEnvelope, status: str = "accepted") -> bool:
-        raw = envelope.model_dump(mode="json")
+        raw = model_json(envelope)
         serialized = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         digest = content_hash(raw)
         with self._lock, self.db:
@@ -350,7 +350,7 @@ class EventStore:
         ]
 
     def append_lineage(self, event: LineageEvent) -> bool:
-        raw = event.model_dump(mode="json")
+        raw = model_json(event)
         serialized = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         with self._lock, self.db:
             try:
