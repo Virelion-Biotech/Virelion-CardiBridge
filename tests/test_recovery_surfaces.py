@@ -45,20 +45,34 @@ def test_crashed_consumer_claim_expires_and_recovers(tmp_path):
     store.close()
 
 
-def test_claim_ownership_and_renewal(tmp_path):
+def test_claim_ownership_and_renewal(tmp_path, monkeypatch):
     store = EventStore(tmp_path / "claims.db")
     other = EventStore(tmp_path / "claims.db")
     item = message()
     store.append(item)
+    clock = [1000.0]
+    monkeypatch.setattr("cardibridge.store.time.time", lambda: clock[0])
     assert store.claim("fixed", {"accepted"}, owner="first", lease_seconds=0.06)
+    clock[0] += 0.02
     with store.lease("fixed", "first", seconds=0.06):
-        time.sleep(0.12)
+        # Wait for an observed renewal, not a scheduler-dependent expiry race.
+        deadline = time.monotonic() + 5
+        while True:
+            with store._lock:
+                expiry = store.db.execute(
+                    "SELECT lease_until FROM events WHERE key='fixed'"
+                ).fetchone()[0]
+            if expiry > 1000.06:
+                break
+            assert time.monotonic() < deadline, "heartbeat did not renew the claim"
+            time.sleep(0.01)
+        clock[0] = 1000.07  # Past the original lease; before the observed renewal.
         assert not other.claim("fixed", {"accepted"}, owner="second")
         with pytest.raises(ValueError):
             other.complete("fixed", "wrong", owner="second")
         with pytest.raises(ValueError):
             other.mark(item.message_id, "processed", owner="second")
-    time.sleep(0.07)
+    clock[0] = 1000.20
     assert other.claim("fixed", {"accepted"}, owner="second")
     with pytest.raises(ValueError):
         store.complete("fixed", "stale", owner="first")

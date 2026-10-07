@@ -41,6 +41,8 @@ Baseline: main `d17d30b057e7744cbd6fe23afb805db081e66f40`, version 0.3.0. The 51
 - Runtime dependency vulnerability audit: no known vulnerabilities in the checked pinned installed dependency set. The separate CI security job audits its resolved development/server environment. An audit is a point-in-time check against known advisories.
 - CI configuration: Ubuntu and Windows, Python 3.10–3.14, test/lint/type/build/clean-wheel checks; separate security and official AsyncAPI validation jobs. Remote execution status is available in the repository's Actions history for the audit commit.
 
+Heartbeat renewal is tested with an observed SQLite expiry update and a controlled clock, so ownership assertions do not depend on runner scheduling.
+
 Reproduction cases live in `tests/test_delivery_regressions.py`, `tests/test_recovery_surfaces.py`, and `tests/test_transport_adapters.py`. Existing adversarial, multiservice, benchmark-contract, end-to-end, provenance, and scrub suites remain enabled.
 
 ## Recovery and operational boundaries
