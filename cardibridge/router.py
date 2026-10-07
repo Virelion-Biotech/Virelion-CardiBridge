@@ -5,6 +5,7 @@ from threading import Lock
 from typing import Any
 
 from .contracts import BridgeEnvelope
+from .protocol import content_hash
 from .registry import ContractRegistry
 
 Handler = Callable[[BridgeEnvelope], Any]
@@ -16,6 +17,7 @@ class BridgeRouter:
     def __init__(self, registry: ContractRegistry) -> None:
         self.registry = registry
         self._handlers: dict[tuple[str, str], Handler] = {}
+        self._identities: dict[str, str] = {}
         self._seen: set[str] = set()
         self._processing: set[str] = set()
         self._lock = Lock()
@@ -28,8 +30,12 @@ class BridgeRouter:
             self._handlers[(message_type, consumer)] = handler
 
     def dispatch(self, envelope: BridgeEnvelope) -> Any:
+        envelope = self.registry.validate_envelope(envelope)
+        digest = content_hash(envelope.model_dump(mode="json"))
         key = envelope.idempotency_key
         with self._lock:
+            if key in self._identities and self._identities[key] != digest:
+                raise ValueError("idempotency_key is associated with a different envelope")
             if key in self._seen or key in self._processing:
                 return {"status": "duplicate", "message_id": envelope.message_id}
             handler = self._handlers.get((envelope.message_type, envelope.consumer))
@@ -38,15 +44,17 @@ class BridgeRouter:
                     f"no handler for {envelope.message_type!r} -> {envelope.consumer!r}"
                 )
             self._processing.add(key)
+            self._identities[key] = digest
 
         try:
             report = self.registry.validate(envelope.message_type, envelope.payload)
             if not report.valid:
                 raise ValueError(report.model_dump_json())
             return_value = handler(envelope)
-        except Exception:
+        except BaseException:
             with self._lock:
                 self._processing.discard(key)
+                self._identities.pop(key, None)
             raise
         else:
             with self._lock:

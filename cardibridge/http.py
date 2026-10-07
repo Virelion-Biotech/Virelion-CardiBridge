@@ -14,15 +14,15 @@ from .defaults import default_registry
 from .router import BridgeRouter
 
 
-def create_app() -> Any:
+def create_app(bridge_router: BridgeRouter | None = None) -> Any:
     try:
         from fastapi import FastAPI, HTTPException
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("Install the 'server' extra to use the HTTP gateway") from exc
 
-    registry = default_registry()
-    bridge_router = BridgeRouter(registry)
-    app = FastAPI(title="Virelion CardiBridge", version="0.3.0")
+    registry = bridge_router.registry if bridge_router is not None else default_registry()
+    bridge_router = bridge_router or BridgeRouter(registry)
+    app = FastAPI(title="Virelion CardiBridge", version="0.3.1")
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -54,6 +54,10 @@ def create_app() -> Any:
     def route(envelope: BridgeEnvelope) -> dict[str, Any]:
         try:
             return {"result": bridge_router.dispatch(envelope)}
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 

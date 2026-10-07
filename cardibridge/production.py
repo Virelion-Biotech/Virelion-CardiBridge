@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterable
 from typing import Any
+from uuid import uuid4
 
 from .contracts import BridgeEnvelope
 from .observability import BridgeMetrics
@@ -44,43 +45,47 @@ class ProductionRouter:
 
     def dispatch(self, envelope: BridgeEnvelope) -> Any:
         started = time.perf_counter()
-        report = self.registry.validate(envelope.message_type, envelope.payload)
-        if not report.valid:
+        try:
+            envelope = self.registry.validate_envelope(envelope)
+        except (KeyError, TypeError, ValueError):
             self.metrics.observe("validation_failures")
-            raise ValueError(report.model_dump_json())
+            raise
 
         existing = self.store.status_by_key(envelope.idempotency_key)
         if existing is not None and not self._is_same_envelope(envelope):
             raise ValueError("idempotency_key is already associated with a different envelope")
-        if existing in self._FINAL_STATUSES or existing == "processing":
+        if existing in self._FINAL_STATUSES:
             self.metrics.observe("duplicates")
             return self.store.duplicate_receipt(envelope.idempotency_key)
         if existing is None:
             self.store.append(envelope, status="accepted")
 
-        if not self.store.claim(envelope.idempotency_key, self._CLAIMABLE_STATUSES):
+        owner = uuid4().hex
+        if not self.store.claim(envelope.idempotency_key, self._CLAIMABLE_STATUSES, owner=owner):
             self.metrics.observe("duplicates")
             return self.store.duplicate_receipt(envelope.idempotency_key)
 
         handler = self._handlers.get((envelope.message_type, envelope.consumer))
         if handler is None:
-            self.store.mark(envelope.message_id, "handler_failed")
+            self.store.mark(envelope.message_id, "handler_failed", owner=owner)
             self.metrics.observe("delivery_failures")
             raise LookupError(f"no handler for {envelope.message_type!r} -> {envelope.consumer!r}")
 
         try:
-            result = handler(envelope)
-            self.store.complete(envelope.idempotency_key, result)
+            with self.store.lease(envelope.idempotency_key, owner):
+                result = handler(envelope.model_copy(deep=True))
+                self.store.complete(envelope.idempotency_key, result, owner=owner)
             self.metrics.observe("published")
             return result
-        except Exception:
-            self.store.mark(envelope.message_id, "handler_failed")
+        except BaseException:
+            self.store.mark(envelope.message_id, "handler_failed", owner=owner)
             self.metrics.observe("handler_failures")
             raise
         finally:
             self.metrics.latency(started)
 
     def receipt(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
+        envelope = self.registry.validate_envelope(envelope)
         accepted = self.store.append(envelope, status="outbox")
         return DeliveryReceipt(
             envelope.message_id,

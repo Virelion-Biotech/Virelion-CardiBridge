@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1 — 2026-10-07
+
+- Make in-memory delivery retryable and cancellation-safe; reject conflicting idempotency identities.
+- Add renewable SQLite inbox/outbox claims, interrupted-worker recovery, and durable dead-letter diagnostics.
+- Verify stored event, lineage, and consumer-result digests; reject conflicting lineage identities.
+- Enforce routing contract versions, reject ambiguous JSON, isolate migration and handler payloads, and bound retry arithmetic.
+- Protect gateway replay, normalize validation errors, reject unfinished HTTP acknowledgements, and preserve duplicate receipts.
+- Repair AsyncAPI envelope schemas, topic addresses, references, and canonical registry consistency.
+- Flush NATS publication when supported and unsubscribe on stream cleanup.
+- Add 46 tests, clean wheel validation, official AsyncAPI validation, and Ubuntu/Windows Python 3.10–3.14 CI.
+
+
 All notable changes to Virelion-CardiBridge are documented here.
 
 ## [0.3.0] - 2026-09-15

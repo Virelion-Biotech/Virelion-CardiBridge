@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
+import math
 from collections import defaultdict
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -12,7 +14,7 @@ from urllib.request import Request, urlopen
 
 from .contracts import BridgeEnvelope
 from .deadletter import DeadLetterQueue
-from .protocol import DeliveryError, DeliveryReceipt, topic_for
+from .protocol import DeliveryError, DeliveryReceipt, content_hash, topic_for
 from .reliability import RetryPolicy
 from .store import EventStore
 
@@ -35,31 +37,54 @@ class InMemoryTransport:
 
     def __init__(self) -> None:
         self.messages: list[BridgeEnvelope] = []
-        self.subscribers: dict[str, list[Callable[[BridgeEnvelope], Awaitable[None]]]] = defaultdict(list)
+        self.subscribers: dict[str, list[Callable[[BridgeEnvelope], Awaitable[None]]]] = (
+            defaultdict(list)
+        )
         self._queues: dict[str, list[asyncio.Queue[BridgeEnvelope]]] = defaultdict(list)
-        self._seen_keys: set[str] = set()
+        self._seen_keys: dict[str, str] = {}
+        self._publishing: dict[str, asyncio.Task[Any]] = {}
 
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
-        topic = topic_for(envelope)
-        now = datetime.now(timezone.utc).isoformat()
-        if envelope.idempotency_key in self._seen_keys:
+        envelope = BridgeEnvelope.model_validate(envelope.model_dump(mode="json"))
+        key = envelope.idempotency_key
+        identity = content_hash(envelope.model_dump(mode="json"))
+        pending = self._publishing.get(key)
+        if pending is not None:
+            if pending is asyncio.current_task():
+                raise DeliveryError("recursive publication of the same idempotency key")
+            await asyncio.shield(pending)
+            return await self.publish(envelope)
+        if key in self._seen_keys:
+            if self._seen_keys[key] != identity:
+                raise ValueError("idempotency_key is associated with a different envelope")
             return DeliveryReceipt(
                 envelope.message_id,
-                envelope.idempotency_key,
-                topic,
-                now,
+                key,
+                topic_for(envelope),
+                datetime.now(timezone.utc).isoformat(),
                 duplicate=True,
             )
-        self._seen_keys.add(envelope.idempotency_key)
-        self.messages.append(envelope)
-        try:
-            for callback in tuple(self.subscribers.get(topic, ())):
-                await callback(envelope)
-        except Exception as exc:
-            raise DeliveryError(str(exc)) from exc
-        for queue in tuple(self._queues.get(topic, ())):
-            queue.put_nowait(envelope)
-        return DeliveryReceipt(envelope.message_id, envelope.idempotency_key, topic, now)
+
+        async def deliver() -> DeliveryReceipt:
+            topic = topic_for(envelope)
+            try:
+                for callback in tuple(self.subscribers.get(topic, ())):
+                    await callback(envelope.model_copy(deep=True))
+                for queue in tuple(self._queues.get(topic, ())):
+                    queue.put_nowait(envelope.model_copy(deep=True))
+                self.messages.append(envelope.model_copy(deep=True))
+                self._seen_keys[key] = identity
+                return DeliveryReceipt(
+                    envelope.message_id, key, topic, datetime.now(timezone.utc).isoformat()
+                )
+            except Exception as exc:
+                raise DeliveryError(str(exc)) from exc
+            finally:
+                self._publishing.pop(key, None)
+
+        task = asyncio.create_task(deliver())
+        self._publishing[key] = task
+        return await task
 
     def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
         if not topic.strip():
@@ -121,7 +146,7 @@ class HttpTransport:
     ) -> None:
         if not endpoint.startswith(("http://", "https://")):
             raise ValueError("endpoint must use http:// or https://")
-        if timeout_seconds <= 0:
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be > 0")
         self.endpoint = endpoint
         self.timeout_seconds = timeout_seconds
@@ -147,12 +172,23 @@ class HttpTransport:
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
         from .codec import EnvelopeCodec
 
-        await asyncio.to_thread(self._post, EnvelopeCodec.encode(envelope))
+        body = await asyncio.to_thread(self._post, EnvelopeCodec.encode(envelope))
+        try:
+            response = json.loads(body)
+            if (
+                not isinstance(response, dict)
+                or response.get("message_id") != envelope.message_id
+                or response.get("status") not in {"processed", "duplicate"}
+            ):
+                raise ValueError("invalid gateway acknowledgement")
+        except (ValueError, UnicodeError) as exc:
+            raise DeliveryError("invalid gateway acknowledgement") from exc
         return DeliveryReceipt(
             envelope.message_id,
             envelope.idempotency_key,
             topic_for(envelope),
             datetime.now(timezone.utc).isoformat(),
+            duplicate=response["status"] == "duplicate",
         )
 
     def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
@@ -170,7 +206,7 @@ class DurableTransportAdapter:
         self.transport = transport
         self.store = store
         self.retry = retry or RetryPolicy()
-        self.dead_letter = dead_letter or DeadLetterQueue()
+        self.dead_letter = dead_letter if dead_letter is not None else DeadLetterQueue()
 
     async def publish(self, envelope: BridgeEnvelope) -> DeliveryReceipt:
         from .reliability import attempt_with_retry
@@ -193,6 +229,9 @@ class NatsTransport:
         topic = topic_for(envelope)
         try:
             await self.client.publish(topic, EnvelopeCodec.encode(envelope))
+            flush = getattr(self.client, "flush", None)
+            if flush is not None:
+                await flush()
         except Exception as exc:
             raise DeliveryError(str(exc)) from exc
         return DeliveryReceipt(
@@ -204,10 +243,13 @@ class NatsTransport:
 
     async def subscribe(self, topic: str) -> AsyncIterator[BridgeEnvelope]:
         subscription = await self.client.subscribe(topic)
-        async for message in subscription:
-            from .codec import EnvelopeCodec
+        try:
+            async for message in subscription:
+                from .codec import EnvelopeCodec
 
-            yield EnvelopeCodec.decode(message.data)
+                yield EnvelopeCodec.decode(message.data)
+        finally:
+            await subscription.unsubscribe()
 
 
 class KafkaTransport:

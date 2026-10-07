@@ -1,7 +1,9 @@
 """HTTP gateway for the CardiBridge protocol."""
+
 from __future__ import annotations
 
 import base64
+import hmac
 import os
 from typing import Any
 
@@ -27,14 +29,18 @@ def create_app(
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError("Install the 'server' extra to use the HTTP gateway") from exc
 
-    registry = registry or default_registry()
+    registry = registry or (router.registry if router is not None else default_registry())
+    if router is not None and registry.catalog() != router.registry.catalog():
+        raise ValueError("gateway and router contract registries differ")
     codec = codec or EnvelopeCodec()
     router = router or ProductionRouter(registry)
-    app = FastAPI(title="CardiBridge Protocol Gateway", version="0.3.0")
+    app = FastAPI(title="CardiBridge Protocol Gateway", version="0.3.1")
 
     def credential_ok(key: str | None) -> bool:
         required = os.getenv("CARDIBRIDGE_GATEWAY_KEY")
-        return not required or key == required
+        return not required or (
+            key is not None and hmac.compare_digest(key.encode(), required.encode())
+        )
 
     @app.get("/health")
     def health_endpoint() -> dict[str, Any]:
@@ -62,9 +68,11 @@ def create_app(
             obj = BridgeEnvelope.model_validate(envelope)
             report = registry.validate(obj.message_type, obj.payload)
         except ValidationError as exc:
-            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+            raise HTTPException(status_code=422, detail=exc.errors(include_context=False)) from exc
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if obj.trace.schema_version != registry.version(obj.message_type):
+            raise HTTPException(status_code=422, detail="unsupported contract version")
         return {"valid": report.valid, "report": report.model_dump(mode="json")}
 
     @app.post("/v1/encode")
@@ -77,11 +85,15 @@ def create_app(
             obj = BridgeEnvelope.model_validate(envelope)
             report = registry.validate(obj.message_type, obj.payload)
         except ValidationError as exc:
-            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+            raise HTTPException(status_code=422, detail=exc.errors(include_context=False)) from exc
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         if not report.valid:
             raise HTTPException(status_code=422, detail=report.model_dump(mode="json"))
+        try:
+            obj = registry.validate_envelope(obj)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {"payload": base64.b64encode(codec.encode(obj)).decode("ascii")}
 
     @app.post("/v1/messages")
@@ -90,14 +102,21 @@ def create_app(
     ) -> dict[str, Any]:
         if not credential_ok(x_bridge_key):
             raise HTTPException(status_code=401, detail="invalid gateway credential")
-        report = registry.validate(envelope.message_type, envelope.payload)
-        if not report.valid:
-            raise HTTPException(status_code=422, detail=report.model_dump(mode="json"))
+        try:
+            envelope = registry.validate_envelope(envelope)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         try:
             result = router.dispatch(envelope)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except LookupError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         status = result.get("status") if isinstance(result, dict) else None
+        if status == "duplicate" and router.store.status(envelope.message_id) != "processed":
+            raise HTTPException(status_code=503, detail="delivery is not completed")
         return {
             "status": status if status in {"processed", "duplicate"} else "processed",
             "message_id": envelope.message_id,
@@ -106,8 +125,15 @@ def create_app(
 
     @app.get("/v1/replay")
     def replay(
-        topic: str | None = None, after: int = 0, limit: int = 100
+        topic: str | None = None,
+        after: int = 0,
+        limit: int = 100,
+        x_bridge_key: str | None = Header(default=None),
     ) -> list[tuple[int, BridgeEnvelope]]:
+        if not credential_ok(x_bridge_key):
+            raise HTTPException(status_code=401, detail="invalid gateway credential")
+        if after < 0:
+            raise HTTPException(status_code=400, detail="after must be non-negative")
         if limit < 1 or limit > 1000:
             raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
         return list(router.replay(topic, after, limit))

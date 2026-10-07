@@ -14,7 +14,6 @@ CONTRACTS: dict[str, type[BaseModel]] = {
 
 
 def default_registry() -> ContractRegistry:
-    registry = ContractRegistry()
-    for name, model in CONTRACTS.items():
-        registry.register(name, model, "1.0.0")
-    return registry
+    from .defaults import default_registry as canonical_registry
+
+    return canonical_registry()

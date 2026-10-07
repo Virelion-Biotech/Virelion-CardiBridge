@@ -1,4 +1,5 @@
 """Stable wire-level protocol primitives for external transports."""
+
 from __future__ import annotations
 
 import hashlib
@@ -30,10 +31,15 @@ def verify(value: Any, signature: str, secret: bytes) -> bool:
     if not secret or not signature:
         return False
     expected = sign(value, secret)
-    return hmac.compare_digest(expected, signature)
+    try:
+        return hmac.compare_digest(expected, signature)
+    except TypeError:
+        return False
 
 
-def frame(envelope: Any, *, key_id: str | None = None, secret: bytes | None = None) -> dict[str, Any]:
+def frame(
+    envelope: Any, *, key_id: str | None = None, secret: bytes | None = None
+) -> dict[str, Any]:
     payload = envelope.model_dump(mode="json") if hasattr(envelope, "model_dump") else envelope
     result: dict[str, Any] = {
         "protocol": PROTOCOL,
@@ -51,7 +57,11 @@ def frame(envelope: Any, *, key_id: str | None = None, secret: bytes | None = No
 def validate_frame(value: dict[str, Any], *, secret: bytes | None = None) -> None:
     if not isinstance(value, dict):
         raise TypeError("wire frame must be an object")
-    if value.get("protocol") != PROTOCOL or value.get("wire_version") != WIRE_VERSION:
+    if (
+        value.get("protocol") != PROTOCOL
+        or type(value.get("wire_version")) is not int
+        or value.get("wire_version") != WIRE_VERSION
+    ):
         raise ValueError("unsupported CardiBridge wire protocol")
     if value.get("content_type") != CONTENT_TYPE:
         raise ValueError("unsupported CardiBridge content type")

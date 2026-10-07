@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .catalog import export_asyncapi
+from .codec import _reject_constant, _unique_object
 from .defaults import default_registry
 from .registry import ContractRegistry
 
@@ -20,7 +21,7 @@ def _load_json(value: str) -> object:
         raw = path.read_text(encoding="utf-8")
     else:
         raw = value
-    return json.loads(raw)
+    return json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -64,7 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as exc:
         print(json.dumps({"valid": False, "error": str(exc)}))
         return 2
-    except json.JSONDecodeError as exc:
+    except (ValueError, TypeError) as exc:
         print(json.dumps({"valid": False, "error": str(exc)}))
         return 2
     except KeyError as exc:

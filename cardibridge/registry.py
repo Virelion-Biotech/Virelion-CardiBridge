@@ -54,8 +54,17 @@ class ContractRegistry:
         model = self.model(name)
         version = self._versions[name]
         try:
-            model.model_validate(payload)
-        except ValidationError as exc:
+            from .protocol import canonical_json
+
+            canonical_json(model.model_validate(payload).model_dump(mode="json"))
+        except (TypeError, ValueError) as exc:
+            if not isinstance(exc, ValidationError):
+                return ValidationReport(
+                    valid=False,
+                    schema_name=name,
+                    schema_version=version,
+                    errors=[{"type": "json_value", "message": str(exc), "loc": []}],
+                )
             return ValidationReport(
                 valid=False,
                 schema_name=name,
@@ -66,6 +75,20 @@ class ContractRegistry:
                 ],
             )
         return ValidationReport(valid=True, schema_name=name, schema_version=version)
+
+    def validate_envelope(self, envelope: BridgeEnvelope) -> BridgeEnvelope:
+        """Validate a detached snapshot against the negotiated contract version."""
+        from .protocol import canonical_json
+
+        raw = envelope.model_dump(mode="json")
+        canonical_json(raw)
+        snapshot = BridgeEnvelope.model_validate(raw)
+        if snapshot.trace.schema_version != self.version(snapshot.message_type):
+            raise ValueError("envelope schema version does not match registered contract")
+        report = self.validate(snapshot.message_type, snapshot.payload)
+        if not report.valid:
+            raise ValueError(report.model_dump_json())
+        return snapshot
 
     def fingerprint(self, name: str) -> str:
         self.model(name)

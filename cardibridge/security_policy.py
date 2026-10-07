@@ -64,4 +64,7 @@ def verify_bytes(payload: bytes, signature: str, secret: bytes) -> bool:
     if not signature or not secret:
         return False
     expected = sign_bytes(payload, secret)
-    return hmac.compare_digest(expected, signature)
+    try:
+        return hmac.compare_digest(expected, signature)
+    except TypeError:
+        return False

@@ -22,4 +22,7 @@ def verify_envelope(envelope: BridgeEnvelope, secret: bytes) -> bool:
     if not secret or not envelope.signature:
         return False
     expected = sign_envelope(envelope, secret)
-    return hmac.compare_digest(expected, envelope.signature)
+    try:
+        return hmac.compare_digest(expected, envelope.signature)
+    except TypeError:
+        return False

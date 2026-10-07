@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
 
 from .protocol import ContractMismatch
-from .registry import ContractRegistry
+from .registry import _SEMVER, ContractRegistry
 
 Migration = Callable[[dict[str, Any]], dict[str, Any]]
 
@@ -28,10 +29,12 @@ class CompatibilityManager:
         self.registry = registry
         self._migrations: dict[tuple[str, str, str], Migration] = {}
 
-    def register_migration(
-        self, contract: str, source: str, target: str, fn: Migration
-    ) -> None:
+    def register_migration(self, contract: str, source: str, target: str, fn: Migration) -> None:
         self.registry.model(contract)
+        if not all(_SEMVER.fullmatch(v) for v in (source, target)):
+            raise ValueError("migration versions must be semantic versions")
+        if not callable(fn):
+            raise TypeError("migration must be callable")
         key = (contract, source, target)
         if source == target:
             raise ValueError("source and target versions must differ")
@@ -42,7 +45,7 @@ class CompatibilityManager:
     def check(self, contract: str, source: str, target: str) -> CompatibilityResult:
         self.registry.model(contract)
         if source == target:
-            return CompatibilityResult(True, source, target)
+            return CompatibilityResult(target == self.registry.version(contract), source, target)
         if (contract, source, target) in self._migrations:
             return CompatibilityResult(True, source, target, migrated=True)
         return CompatibilityResult(False, source, target, warnings=("no registered migration",))
@@ -57,9 +60,12 @@ class CompatibilityManager:
         result = self.check(contract, source, target)
         if not result.compatible:
             raise ContractMismatch(f"no migration for {contract} {source} -> {target}")
+        if target != self.registry.version(contract):
+            raise ContractMismatch("target schema is not registered")
         if source == target:
-            return payload
-        migrated = self._migrations[(contract, source, target)](dict(payload))
+            self.registry.model(contract).model_validate(payload)
+            return deepcopy(payload)
+        migrated = self._migrations[(contract, source, target)](deepcopy(payload))
         if not isinstance(migrated, dict):
             raise TypeError("migration must return a dict")
         self.registry.model(contract).model_validate(migrated)

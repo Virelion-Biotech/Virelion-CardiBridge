@@ -12,6 +12,15 @@ def _reject_constant(value: str) -> object:
     raise ValueError(f"non-finite JSON constant is not permitted: {value}")
 
 
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 class EnvelopeCodec:
     """Canonical wire codec with strict JSON and optional base64 framing."""
 
@@ -26,9 +35,11 @@ class EnvelopeCodec:
         value: Any = json.loads(
             data,
             parse_constant=_reject_constant,
+            object_pairs_hook=_unique_object,
         )
         if not isinstance(value, dict):
             raise TypeError("envelope wire representation must be a JSON object")
+        canonical_json(value)
         return BridgeEnvelope.model_validate(value)
 
     @classmethod

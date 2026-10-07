@@ -15,6 +15,20 @@ _SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 
 def canonical_json(value: Any) -> bytes:
     """Return a deterministic UTF-8 JSON encoding; reject non-JSON values."""
+
+    def check(item: Any) -> None:
+        if isinstance(item, dict):
+            if any(not isinstance(key, str) for key in item):
+                raise TypeError("JSON object keys must be strings")
+            for child in item.values():
+                check(child)
+        elif isinstance(item, list):
+            for child in item:
+                check(child)
+        elif item is not None and type(item) not in (str, bool, int, float):
+            raise TypeError("value is not a JSON primitive")
+
+    check(value)
     return json.dumps(
         value,
         sort_keys=True,

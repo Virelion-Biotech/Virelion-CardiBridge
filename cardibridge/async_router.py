@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .contracts import BridgeEnvelope
+from .protocol import content_hash
 from .registry import ContractRegistry
 
 AsyncHandler = Callable[[BridgeEnvelope], Awaitable[Any]]
@@ -16,6 +17,7 @@ class AsyncBridgeRouter:
     def __init__(self, registry: ContractRegistry) -> None:
         self.registry = registry
         self._handlers: dict[tuple[str, str], AsyncHandler] = {}
+        self._identities: dict[str, str] = {}
         self._seen: set[str] = set()
         self._processing: set[str] = set()
         self._lock = asyncio.Lock()
@@ -27,8 +29,12 @@ class AsyncBridgeRouter:
         self._handlers[(message_type, consumer)] = handler
 
     async def dispatch(self, envelope: BridgeEnvelope) -> Any:
+        envelope = self.registry.validate_envelope(envelope)
+        digest = content_hash(envelope.model_dump(mode="json"))
         key = envelope.idempotency_key
         async with self._lock:
+            if key in self._identities and self._identities[key] != digest:
+                raise ValueError("idempotency_key is associated with a different envelope")
             if key in self._seen or key in self._processing:
                 return {"status": "duplicate", "message_id": envelope.message_id}
             report = self.registry.validate(envelope.message_type, envelope.payload)
@@ -40,12 +46,14 @@ class AsyncBridgeRouter:
                     f"no handler for {envelope.message_type!r} -> {envelope.consumer!r}"
                 )
             self._processing.add(key)
+            self._identities[key] = digest
 
         try:
             result = await handler(envelope)
-        except Exception:
+        except BaseException:
             async with self._lock:
                 self._processing.discard(key)
+                self._identities.pop(key, None)
             raise
         else:
             async with self._lock:

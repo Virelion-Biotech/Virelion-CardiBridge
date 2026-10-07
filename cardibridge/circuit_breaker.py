@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from threading import RLock
 from time import monotonic
@@ -15,7 +16,12 @@ class CircuitBreaker:
     """Thread-safe dependency-free circuit breaker."""
 
     def __init__(self, failure_threshold: int = 5, recovery_seconds: float = 30.0) -> None:
-        if failure_threshold < 1 or recovery_seconds <= 0:
+        if (
+            type(failure_threshold) is not int
+            or failure_threshold < 1
+            or not math.isfinite(recovery_seconds)
+            or recovery_seconds <= 0
+        ):
             raise ValueError("invalid circuit breaker configuration")
         self.failure_threshold = failure_threshold
         self.recovery_seconds = recovery_seconds
@@ -42,5 +48,5 @@ class CircuitBreaker:
     def failure(self) -> None:
         with self._lock:
             self.state.failures += 1
-            if self.state.failures >= self.failure_threshold:
+            if self.state.failures >= self.failure_threshold and self.state.opened_at is None:
                 self.state.opened_at = monotonic()

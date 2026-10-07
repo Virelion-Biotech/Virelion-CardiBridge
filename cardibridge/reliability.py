@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Protocol
+from uuid import uuid4
 
 from .contracts import BridgeEnvelope
 from .deadletter import DeadLetter, DeadLetterQueue
@@ -25,8 +27,12 @@ class RetryPolicy:
     jitter: float = 0.10
 
     def __post_init__(self) -> None:
-        if self.max_attempts < 1:
+        if type(self.max_attempts) is not int or self.max_attempts < 1:
             raise ValueError("max_attempts must be >= 1")
+        if not all(
+            math.isfinite(v) for v in (self.base_delay_seconds, self.max_delay_seconds, self.jitter)
+        ):
+            raise ValueError("retry values must be finite")
         if self.base_delay_seconds < 0 or self.max_delay_seconds < 0:
             raise ValueError("retry delays must be non-negative")
         if self.base_delay_seconds > self.max_delay_seconds:
@@ -37,8 +43,15 @@ class RetryPolicy:
     def delay(self, attempt: int, key: str | None = None) -> float:
         if attempt < 1:
             return 0.0
-        multiplier = 2 ** (attempt - 1) if self.exponential else 1
-        delay = min(self.max_delay_seconds, self.base_delay_seconds * multiplier)
+        try:
+            raw = (
+                math.ldexp(self.base_delay_seconds, attempt - 1)
+                if self.exponential and self.base_delay_seconds
+                else self.base_delay_seconds
+            )
+        except OverflowError:
+            raw = self.max_delay_seconds
+        delay = min(self.max_delay_seconds, raw)
         if not key or self.jitter == 0 or delay == 0:
             return delay
         digest = hashlib.sha256(f"{key}:{attempt}".encode()).digest()
@@ -99,8 +112,9 @@ async def attempt_with_retry(
 ) -> DeliveryReceipt:
     """Persist an outbox record, resume existing retries, and capture terminal failures."""
     accepted = store.append(envelope, status="outbox")
-    current = envelope
-    prior_attempts: list[DeliveryAttempt] = []
+    current = store.get_envelope(envelope.message_id)
+    if current is None:
+        raise ValueError("outbox envelope is missing")
 
     if not accepted:
         status = store.status_by_key(envelope.idempotency_key)
@@ -116,15 +130,72 @@ async def attempt_with_retry(
                 duplicate=True,
                 sequence=None,
             )
-        if status not in {"outbox", "retry"}:
+        if status not in {"outbox", "retry", "publishing"}:
             raise ValueError(f"cannot resume delivery in status {status!r}")
         current = stored
-        prior_attempts = store.attempts(stored.message_id)
 
+    owner = uuid4().hex
+    if not store.claim(
+        current.idempotency_key, {"outbox", "retry"}, owner=owner, processing_status="publishing"
+    ):
+        return DeliveryReceipt(
+            current.message_id,
+            current.idempotency_key,
+            topic_for(current),
+            current.timestamp.isoformat(),
+            duplicate=True,
+        )
+    try:
+        with store.lease(current.idempotency_key, owner):
+            return await _publish_claimed(
+                transport,
+                current,
+                store,
+                retry,
+                dead_letter,
+                store.attempts(current.message_id),
+                owner,
+            )
+    except BaseException:
+        if store.status(current.message_id) == "publishing":
+            store.mark(current.message_id, "retry", owner=owner)
+        raise
+
+
+async def _publish_claimed(
+    transport: PublishTransport,
+    current: BridgeEnvelope,
+    store: EventStore,
+    retry: RetryPolicy,
+    dead_letter: DeadLetterQueue,
+    prior_attempts: list[DeliveryAttempt],
+    owner: str,
+) -> DeliveryReceipt:
+    if prior_attempts and prior_attempts[-1].success:
+        store.mark(current.message_id, "published", owner=owner)
+        return DeliveryReceipt(
+            current.message_id,
+            current.idempotency_key,
+            topic_for(current),
+            current.timestamp.isoformat(),
+            duplicate=True,
+        )
+    if prior_attempts and prior_attempts[-1].next_retry_at:
+        await asyncio.sleep(
+            max(
+                0.0, (prior_attempts[-1].next_retry_at - datetime.now(timezone.utc)).total_seconds()
+            )
+        )
     if len(prior_attempts) >= retry.max_attempts:
         reason = prior_attempts[-1].error if prior_attempts else "retry budget exhausted"
-        store.mark(current.message_id, "dead_letter")
-        dead_letter.put(DeadLetter(envelope=current, reason=reason or "retry budget exhausted", attempts=tuple(prior_attempts)))
+        store.mark(current.message_id, "dead_letter", owner=owner)
+        dead_letter.put(
+            DeadLetter(
+                envelope=current,
+                reason=reason or "retry budget exhausted",
+                attempts=tuple(prior_attempts),
+            )
+        )
         raise DeliveryError(reason or "retry budget exhausted")
 
     attempts = list(prior_attempts)
@@ -135,7 +206,9 @@ async def attempt_with_retry(
             receipt = await transport.publish(current)
         except DeliveryError as exc:
             next_retry_at = (
-                retry.next_retry_at(attempt_number, now=attempted_at, key=current.idempotency_key)
+                retry.next_retry_at(
+                    attempt_number, now=datetime.now(timezone.utc), key=current.idempotency_key
+                )
                 if attempt_number < retry.max_attempts
                 else None
             )
@@ -148,14 +221,13 @@ async def attempt_with_retry(
                 next_retry_at=next_retry_at,
             )
             attempts.append(attempt)
-            store.record_attempt(attempt)
+            store.record_attempt(attempt, owner=owner)
             if next_retry_at is None:
-                store.mark(current.message_id, "dead_letter")
+                store.mark(current.message_id, "dead_letter", owner=owner)
                 dead_letter.put(
                     DeadLetter(envelope=current, reason=str(exc), attempts=tuple(attempts))
                 )
                 raise DeliveryError(str(exc)) from exc
-            store.mark(current.message_id, "retry")
             await asyncio.sleep(
                 max(0.0, (next_retry_at - datetime.now(timezone.utc)).total_seconds())
             )
@@ -166,8 +238,8 @@ async def attempt_with_retry(
                 success=True,
                 attempted_at=attempted_at,
             )
-            store.record_attempt(attempt)
-            store.mark(current.message_id, "published")
+            store.record_attempt(attempt, owner=owner)
+            store.mark(current.message_id, "published", owner=owner)
             return receipt
 
     raise RuntimeError("retry loop exited without terminal result")

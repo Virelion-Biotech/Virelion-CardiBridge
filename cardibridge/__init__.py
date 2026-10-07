@@ -39,7 +39,7 @@ from .transport import (
     TransportHealth,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "AGENT_CHALLENGE",
