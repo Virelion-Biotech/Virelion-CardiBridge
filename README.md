@@ -2,6 +2,21 @@
 
 CardiBridge is the contract-first interoperability layer for the Virelion computational cardiac stack. It standardizes typed messages, schema evolution, provenance, artifact references, execution context, routing, delivery semantics, and transport adapters without embedding cardiac algorithms or a specific broker.
 
+
+<!-- VALIDATION_PRODUCT_STATUS:BEGIN -->
+## Validation and product completion status
+
+**Reviewed 2026-10-14; implementation base `fc990ace415c`.** **Status: Contract/durable-local transport checks; broker deployment qualification incomplete.** This is an evidence-backed scope assessment, not a percentage-complete estimate or a declaration that the product is finished.
+
+| Area | Current evidence / remaining gate |
+|---|---|
+| Software / operational checks | Automated test sources and CI definitions are present; this documentation audit does not report a new algorithm/data-validation run. |
+| Scientific or domain evidence | Local HTTP and SQLite delivery have scoped integration evidence. NATS/Kafka client-double checks do not establish real broker failover, ACLs, persistence or throughput; transport correctness does not validate the payload science. |
+| Remaining for the declared product scope | Run real NATS/Kafka broker failure/replay/conformance tests; qualify authentication/authorization, key rotation and delivery observability; test clock/lease and crash-idempotency behavior at deployment scale; preserve explicit consumer scientific validation responsibilities. |
+
+Evidence and limits: [repository report](docs/VALIDATION_AUDIT_2026-10-07.md). The [organization status index](https://github.com/Virelion-Biotech/Virelion-HeartTwin/blob/main/docs/STACK_VALIDATION_STATUS.md) separates software, numerical, data-readiness and empirical qualification. Code/schema execution or a completed download is not a substitute for endpoint-specific validation.
+<!-- VALIDATION_PRODUCT_STATUS:END -->
+
 ## What it contains
 
 - Strict Pydantic message contracts with semantic versions.
