@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m pip install -e '.[dev,server]' hypothesis
+      - run: python -m pip install -e '.[dev,server]'
       - run: python -m pip check
       - run: python -m ruff check cardibridge tests ci
       - run: python -m mypy cardibridge
