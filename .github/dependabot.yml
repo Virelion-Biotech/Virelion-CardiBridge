@@ -5,30 +5,37 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "03:00"
+      time: "02:30"
       timezone: "Asia/Riyadh"
-    open-pull-requests-limit: 10
-    labels:
-      - dependencies
-
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    groups:
+      nonbreaking-python:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "03:30"
+      time: "03:00"
       timezone: "Asia/Riyadh"
-    open-pull-requests-limit: 10
-    labels:
-      - dependencies
-
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    groups:
+      nonbreaking-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "npm"
     directory: "/ci"
     schedule:
       interval: "weekly"
       day: "monday"
-      time: "04:30"
+      time: "04:00"
       timezone: "Asia/Riyadh"
     open-pull-requests-limit: 5
-    labels:
-      - dependencies
+    labels: [dependencies]
+    groups:
+      nonbreaking-npm:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
