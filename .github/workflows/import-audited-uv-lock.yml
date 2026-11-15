@@ -1,0 +1,62 @@
+name: Import audited uv lock candidate
+
+on:
+  push:
+    branches:
+      - chore/import-audited-uv-lock-2026-11-15
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  import-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out current maintenance branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Download audited candidate from refresh run
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: resolver-lock-candidate-43647053331
+          run-id: 43647053331
+          repository: Virelion-Biotech/Virelion-CardiBridge
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/uv-candidate
+
+      - name: Install pinned uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.13.6"
+          python-version: "3.12"
+          enable-cache: false
+
+      - name: Revalidate candidate lock against current project metadata
+        shell: bash
+        run: |
+          test -s /tmp/uv-candidate/uv.lock
+          cp /tmp/uv-candidate/uv.lock uv.lock
+          uv lock --check --python 3.12
+          uv export --locked --python 3.12 --all-extras --all-groups --no-emit-project --format requirements-txt --output-file /tmp/candidate-dependencies.txt
+          grep -vE '^[[:space:]]*[^[:space:]]+[[:space:]]+@[[:space:]]+git\\+' /tmp/candidate-dependencies.txt > /tmp/candidate-pypi.txt || true
+          test -s /tmp/candidate-pypi.txt
+          uvx --python 3.12 --from pip-audit pip-audit --strict --requirement /tmp/candidate-pypi.txt
+
+      - name: Push lock-only branch based on current main
+        shell: bash
+        run: |
+          git fetch origin main
+          git switch --create maintenance/uv-lock-refresh-2026-11-15 origin/main
+          cp /tmp/uv-candidate/uv.lock uv.lock
+          git add uv.lock
+          if git diff --cached --quiet; then
+            echo "The committed lock is already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(deps): refresh universal uv lock"
+          git push origin HEAD:maintenance/uv-lock-refresh-2026-11-15
